@@ -145,16 +145,22 @@ try {
 }
 
 // -----------------------------
-// SPA fallback for client-side routes (serve dist/index.html)
+// SPA fallback middleware for client-side routes (serve dist/index.html)
 // -----------------------------
 // IMPORTANT: This must come AFTER your API routes so API calls are not hijacked.
-app.get('*', (req, res, next) => {
+// Use app.use middleware (avoids path-to-regexp '*' parsing issue).
+app.use((req, res, next) => {
+  // Only handle GET requests
   if (req.method !== 'GET') return next();
+
+  // Only handle requests that accept HTML (skip API/json requests)
   const accept = req.headers.accept || '';
   if (!accept.includes('text/html')) return next();
+
+  // Serve the SPA index file from dist
   const indexPath = pathModule.join(clientDir, 'index.html');
   res.sendFile(indexPath, err => {
-    if (err) next(err);
+    if (err) return next(err);
   });
 });
 
