@@ -1,0 +1,36 @@
+[
+  {
+    "_id": "6838fd1bca161f0000a1e3c2",
+    "__v": 0,
+    "siteName": "Stacks",
+    "currency": "GBP",
+    "defaultVip": 1,
+    "minWithdraw": 20,
+    "maxWithdraw": 100000,
+    "maintenanceMode": false,
+    "autoOpenHourUK": 10,
+    "platformClosed": true,
+    "service": {
+      "whatsapp": "",
+      "telegram": ""
+    },
+    "whoCanAccessDuringClose": [
+      "MK001"
+    ],
+    "allowList": [],
+    "withdrawFeePercent": 0.5,
+    "activityLock": {
+      "enabled": false,
+      "users": []
+    },
+    "dailyTaskSet": 0,
+    "depositInstructions": "",
+    "homepageNotice": "",
+    "inviteBonus": 20,
+    "maintenance": false,
+    "maxDeposit": 0,
+    "minDeposit": 0,
+    "telegramGroup": "",
+    "withdrawInstructions": ""
+  }
+]

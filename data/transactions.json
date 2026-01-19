@@ -1,0 +1,1829 @@
+[
+  {
+    "_id": "6838feeb640c16ecbecde9fa",
+    "id": "TX008",
+    "user": "Kathy",
+    "type": "admin_add_balance",
+    "amount": 100,
+    "status": "Completed",
+    "createdAt": "2025-05-23T19:25:41.470Z"
+  },
+  {
+    "_id": "6838feeb640c16ecbecde9ff",
+    "id": "TX009",
+    "user": "Josh",
+    "type": "admin_add_balance",
+    "amount": 290,
+    "status": "Completed",
+    "createdAt": "2025-05-25T11:38:00.178Z"
+  },
+  {
+    "_id": "686058f444fa39e241f31246",
+    "user": "Mum",
+    "type": "admin_add_balance",
+    "amount": 103,
+    "status": "Completed",
+    "createdAt": "2025-06-28T21:04:52.084Z",
+    "__v": 0
+  },
+  {
+    "_id": "6929b02c7fdf52629acb900e",
+    "user": "MK001",
+    "type": "admin_add_balance",
+    "amount": 1060,
+    "status": "Completed",
+    "createdAt": "2025-11-28T14:22:36.534Z",
+    "__v": 0
+  },
+  {
+    "_id": "6929b6f77fdf52629acb9191",
+    "user": "MK001",
+    "type": "admin_add_balance",
+    "amount": 374,
+    "status": "Completed",
+    "createdAt": "2025-11-28T14:51:35.598Z",
+    "__v": 0
+  },
+  {
+    "_id": "692b5aeefacd1e2224e78699",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.55,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b5aeefacd1e2224e78697",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b5aeefacd1e2224e78697"
+      },
+      "source": "task:692b5ae4facd1e2224e7868c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T20:43:26.432Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b5e08facd1e2224e786ea",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.34,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b5e08facd1e2224e786e8",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b5e08facd1e2224e786e8"
+      },
+      "source": "task:692b5df8facd1e2224e786dd:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T20:56:40.351Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68639b70377388d91af1",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b68639b70377388d91aef",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b68639b70377388d91aef"
+      },
+      "source": "task:692b68579b70377388d91ae4:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:40:51.966Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68779b70377388d91b09",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.77,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b68779b70377388d91b07",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b68779b70377388d91b07"
+      },
+      "source": "task:692b686e9b70377388d91afc:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:41:11.994Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68869b70377388d91b21",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.88,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b68869b70377388d91b1f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b68869b70377388d91b1f"
+      },
+      "source": "task:692b687f9b70377388d91b14:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:41:26.918Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69c29b70377388d91b4e",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.67,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b69c29b70377388d91b4c",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b69c29b70377388d91b4c"
+      },
+      "source": "task:692b69b99b70377388d91b41:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:46:42.992Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69d09b70377388d91b66",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.9,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b69d09b70377388d91b64",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b69d09b70377388d91b64"
+      },
+      "source": "task:692b69c99b70377388d91b59:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:46:56.846Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69de9b70377388d91b7e",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.99,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b69de9b70377388d91b7c",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b69de9b70377388d91b7c"
+      },
+      "source": "task:692b69d89b70377388d91b71:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:47:10.190Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69ec9b70377388d91b96",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.93,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b69ec9b70377388d91b94",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b69ec9b70377388d91b94"
+      },
+      "source": "task:692b69e59b70377388d91b89:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:47:24.912Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69fe9b70377388d91bae",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 0.7,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b69fe9b70377388d91bac",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b69fe9b70377388d91bac"
+      },
+      "source": "task:692b69f39b70377388d91ba1:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:47:42.481Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a5d9b70377388d91be8",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 17.69,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6a5d9b70377388d91be6",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6a5d9b70377388d91be6"
+      },
+      "source": "task:692b6a059b70377388d91bb9:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:49:17.917Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a739b70377388d91c09",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.53,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6a739b70377388d91c07",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6a739b70377388d91c07"
+      },
+      "source": "task:692b6a6d9b70377388d91bfc:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:49:39.746Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a809b70377388d91c21",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.95,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6a7f9b70377388d91c1f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6a7f9b70377388d91c1f"
+      },
+      "source": "task:692b6a7a9b70377388d91c14:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:49:52.117Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a8d9b70377388d91c39",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.76,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6a8d9b70377388d91c37",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6a8d9b70377388d91c37"
+      },
+      "source": "task:692b6a869b70377388d91c2c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:50:05.323Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a9a9b70377388d91c51",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.59,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6a9a9b70377388d91c4f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6a9a9b70377388d91c4f"
+      },
+      "source": "task:692b6a949b70377388d91c44:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:50:18.833Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6aa99b70377388d91c69",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.68,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6aa99b70377388d91c67",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6aa99b70377388d91c67"
+      },
+      "source": "task:692b6aa39b70377388d91c5c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:50:33.162Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ab69b70377388d91c81",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.64,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6ab69b70377388d91c7f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6ab69b70377388d91c7f"
+      },
+      "source": "task:692b6ab09b70377388d91c74:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:50:46.902Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ac49b70377388d91c99",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.53,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6ac49b70377388d91c97",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6ac49b70377388d91c97"
+      },
+      "source": "task:692b6abd9b70377388d91c8c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:51:00.592Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ad49b70377388d91cb1",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.02,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6ad39b70377388d91caf",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6ad39b70377388d91caf"
+      },
+      "source": "task:692b6acb9b70377388d91ca4:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:51:16.016Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ae19b70377388d91cc9",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.44,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6ae09b70377388d91cc7",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6ae09b70377388d91cc7"
+      },
+      "source": "task:692b6ada9b70377388d91cbc:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:51:29.112Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6aef9b70377388d91ce1",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.53,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6aee9b70377388d91cdf",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6aee9b70377388d91cdf"
+      },
+      "source": "task:692b6ae89b70377388d91cd4:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:51:43.007Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6afd9b70377388d91cf9",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.1,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6afd9b70377388d91cf7",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6afd9b70377388d91cf7"
+      },
+      "source": "task:692b6af69b70377388d91cec:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:51:57.444Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b0c9b70377388d91d11",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.53,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b0c9b70377388d91d0f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b0c9b70377388d91d0f"
+      },
+      "source": "task:692b6b059b70377388d91d04:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:52:12.231Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b1e9b70377388d91d29",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.94,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b1e9b70377388d91d27",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b1e9b70377388d91d27"
+      },
+      "source": "task:692b6b179b70377388d91d1c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:52:30.154Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b2d9b70377388d91d41",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.04,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b2d9b70377388d91d3f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b2d9b70377388d91d3f"
+      },
+      "source": "task:692b6b259b70377388d91d34:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:52:45.414Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b3b9b70377388d91d59",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.02,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b3b9b70377388d91d57",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b3b9b70377388d91d57"
+      },
+      "source": "task:692b6b349b70377388d91d4c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:52:59.942Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b499b70377388d91d71",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.06,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b499b70377388d91d6f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b499b70377388d91d6f"
+      },
+      "source": "task:692b6b429b70377388d91d64:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:53:13.778Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b749b70377388d91d92",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6b739b70377388d91d90",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6b739b70377388d91d90"
+      },
+      "source": "task:692b6b6b9b70377388d91d85:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:53:56.088Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ba09b70377388d91dbd",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.42,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6ba09b70377388d91dbb",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6ba09b70377388d91dbb"
+      },
+      "source": "task:692b6b7b9b70377388d91d9d:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:54:40.820Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bb89b70377388d91ddd",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.77,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6bb89b70377388d91ddb",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6bb89b70377388d91ddb"
+      },
+      "source": "task:692b6ba89b70377388d91dd0:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:55:04.816Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bca9b70377388d91df5",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.26,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6bc99b70377388d91df3",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6bc99b70377388d91df3"
+      },
+      "source": "task:692b6bc09b70377388d91de8:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:55:22.033Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bdb9b70377388d91e0d",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.08,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6bdb9b70377388d91e0b",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6bdb9b70377388d91e0b"
+      },
+      "source": "task:692b6bd29b70377388d91e00:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:55:39.652Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bed9b70377388d91e25",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.28,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6bec9b70377388d91e23",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6bec9b70377388d91e23"
+      },
+      "source": "task:692b6be29b70377388d91e18:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:55:57.004Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bfb9b70377388d91e3d",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.66,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6bfb9b70377388d91e3b",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6bfb9b70377388d91e3b"
+      },
+      "source": "task:692b6bf59b70377388d91e30:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:56:11.836Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c0c9b70377388d91e55",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.62,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c0c9b70377388d91e53",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c0c9b70377388d91e53"
+      },
+      "source": "task:692b6c059b70377388d91e48:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:56:28.646Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c1a9b70377388d91e6d",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.77,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c1a9b70377388d91e6b",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c1a9b70377388d91e6b"
+      },
+      "source": "task:692b6c139b70377388d91e60:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:56:42.983Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c2b9b70377388d91e85",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.67,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c2b9b70377388d91e83",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c2b9b70377388d91e83"
+      },
+      "source": "task:692b6c229b70377388d91e78:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:56:59.753Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c3b9b70377388d91e9d",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.28,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c3b9b70377388d91e9b",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c3b9b70377388d91e9b"
+      },
+      "source": "task:692b6c349b70377388d91e90:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:57:15.929Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c4b9b70377388d91eb5",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.68,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c4b9b70377388d91eb3",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c4b9b70377388d91eb3"
+      },
+      "source": "task:692b6c449b70377388d91ea8:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:57:31.298Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c5d9b70377388d91ecd",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.25,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c5d9b70377388d91ecb",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c5d9b70377388d91ecb"
+      },
+      "source": "task:692b6c559b70377388d91ec0:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:57:49.366Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c6c9b70377388d91ee5",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.12,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c6c9b70377388d91ee3",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c6c9b70377388d91ee3"
+      },
+      "source": "task:692b6c659b70377388d91ed8:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:58:04.763Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c7b9b70377388d91efd",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.44,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692b6c7b9b70377388d91efb",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692b6c7b9b70377388d91efb"
+      },
+      "source": "task:692b6c739b70377388d91ef0:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-29T21:58:19.947Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf227906d13b97086242a",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.32,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bf227906d13b970862428",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bf227906d13b970862428"
+      },
+      "source": "task:692befa7906d13b97086241d:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T07:28:39.590Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf31f906d13b97086248b",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.48,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bf31f906d13b970862489",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bf31f906d13b970862489"
+      },
+      "source": "task:692bf2a0906d13b970862446:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T07:32:47.187Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf532906d13b9708624b4",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.44,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bf532906d13b9708624b2",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bf532906d13b9708624b2"
+      },
+      "source": "task:692bf522906d13b9708624a7:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T07:41:38.938Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf9fe906d13b9708625b0",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.56,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bf9fe906d13b9708625ae",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bf9fe906d13b9708625ae"
+      },
+      "source": "task:692bf9eb906d13b9708625a3:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:02:06.931Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfa10906d13b9708625c8",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.69,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bfa10906d13b9708625c6",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bfa10906d13b9708625c6"
+      },
+      "source": "task:692bfa03906d13b9708625bb:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:02:24.965Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfb2a906d13b9708625ff",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.53,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bfb2a906d13b9708625fd",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bfb2a906d13b9708625fd"
+      },
+      "source": "task:692bfa62906d13b9708625d3:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:07:06.966Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfeb5906d13b970862661",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.89,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bfeb5906d13b97086265f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bfeb5906d13b97086265f"
+      },
+      "source": "task:692bfb33906d13b970862612:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:22:13.591Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfff3906d13b9708626c7",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.12,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bfff3906d13b9708626c5",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bfff3906d13b9708626c5"
+      },
+      "source": "task:692bfeca906d13b970862684:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:27:31.340Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bffff906d13b9708626e0",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.6,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692bffff906d13b9708626dd",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692bffff906d13b9708626dd"
+      },
+      "source": "task:692bfff9906d13b9708626d2:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:27:43.190Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0018906d13b970862708",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.12,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c0018906d13b970862706",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c0018906d13b970862706"
+      },
+      "source": "task:692c0010906d13b9708626fb:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:28:08.636Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0035906d13b970862720",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.23,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c0035906d13b97086271e",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c0035906d13b97086271e"
+      },
+      "source": "task:692c001d906d13b970862713:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:28:37.825Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c024c906d13b970862787",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.26,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c024c906d13b970862785",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c024c906d13b970862785"
+      },
+      "source": "task:692c0242906d13b97086277a:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:37:32.473Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04a4906d13b9708627b0",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.56,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c04a4906d13b9708627ae",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c04a4906d13b9708627ae"
+      },
+      "source": "task:692c049c906d13b9708627a3:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:47:32.651Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04c3906d13b9708627e1",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 17.69,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c04c3906d13b9708627df",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c04c3906d13b9708627df"
+      },
+      "source": "task:692c04a9906d13b9708627bb:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:48:03.825Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04d7906d13b970862801",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.28,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c04d7906d13b9708627ff",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c04d7906d13b9708627ff"
+      },
+      "source": "task:692c04cc906d13b9708627f4:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:48:23.870Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04e5906d13b970862819",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.54,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c04e4906d13b970862817",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c04e4906d13b970862817"
+      },
+      "source": "task:692c04dd906d13b97086280c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:48:37.008Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04fc906d13b970862831",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.16,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c04fc906d13b97086282f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c04fc906d13b97086282f"
+      },
+      "source": "task:692c04e9906d13b970862824:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:49:00.172Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0574906d13b97086289e",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.11,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c0574906d13b97086289c",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c0574906d13b97086289c"
+      },
+      "source": "task:692c0501906d13b97086283c:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:51:00.523Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c05a7906d13b9708628b8",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.83,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c05a7906d13b9708628b6",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c05a7906d13b9708628b6"
+      },
+      "source": "task:692c057a906d13b9708628a9:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T08:51:51.941Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0f63906d13b970862a0a",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.32,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c0f63906d13b970862a08",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c0f63906d13b970862a08"
+      },
+      "source": "task:692c0f5a906d13b9708629fd:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T09:33:23.720Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c2311906d13b970862e1b",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.89,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:692c2311906d13b970862e19",
+    "metadata": {
+      "commissionId": {
+        "$oid": "692c2311906d13b970862e19"
+      },
+      "source": "task:692c2309906d13b970862e0e:completed"
+    },
+    "createdAt": {
+      "$date": "2025-11-30T10:57:21.512Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "69317415a0f1e33799bdefc3",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.84,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:69317414a0f1e33799bdefc1",
+    "metadata": {
+      "commissionId": {
+        "$oid": "69317414a0f1e33799bdefc1"
+      },
+      "source": "task:69317403a0f1e33799bdefb6:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-04T11:44:21.019Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "69346834f52f8ac5feef1fca",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.8,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:69346833f52f8ac5feef1fc7",
+    "metadata": {
+      "commissionId": {
+        "$oid": "69346833f52f8ac5feef1fc7"
+      },
+      "source": "task:6934682ef52f8ac5feef1fbc:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-06T17:30:28.063Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936f747ffc7616f4dcb4d52",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.9,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:6936f747ffc7616f4dcb4d50",
+    "metadata": {
+      "commissionId": {
+        "$oid": "6936f747ffc7616f4dcb4d50"
+      },
+      "source": "task:6936f741ffc7616f4dcb4d43:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T16:05:27.839Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fa47ca7c877937704ab7",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.16,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:6936fa47ca7c877937704ab5",
+    "metadata": {
+      "commissionId": {
+        "$oid": "6936fa47ca7c877937704ab5"
+      },
+      "source": "task:6936fa41ca7c877937704aa8:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T16:18:15.673Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fa54ca7c877937704ad3",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.88,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:6936fa54ca7c877937704ad1",
+    "metadata": {
+      "commissionId": {
+        "$oid": "6936fa54ca7c877937704ad1"
+      },
+      "source": "task:6936fa4dca7c877937704ac4:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T16:18:28.302Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fb9cca7c877937704b3e",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.64,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:6936fb9cca7c877937704b3c",
+    "metadata": {
+      "commissionId": {
+        "$oid": "6936fb9cca7c877937704b3c"
+      },
+      "source": "task:6936fb95ca7c877937704b2f:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T16:23:56.904Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693716ff70c0ffbb181dcfe7",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.24,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693716ff70c0ffbb181dcfe5",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693716ff70c0ffbb181dcfe5"
+      },
+      "source": "task:693716f870c0ffbb181dcfd8:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T18:20:47.753Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6937174270c0ffbb181dd016",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.39,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:6937174270c0ffbb181dd014",
+    "metadata": {
+      "commissionId": {
+        "$oid": "6937174270c0ffbb181dd014"
+      },
+      "source": "task:6937173a70c0ffbb181dd007:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-08T18:21:54.806Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b063b89818e2377bcee92",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 4.06,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b063a89818e2377bcee90",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b063a89818e2377bcee90"
+      },
+      "source": "task:693b062489818e2377bcee80:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T17:58:19.107Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b16ab89818e2377bcef84",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.2,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b16ab89818e2377bcef82",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b16ab89818e2377bcef82"
+      },
+      "source": "task:693b16a189818e2377bcef72:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T19:08:27.487Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b18fe89818e2377bcefaf",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.42,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b18fe89818e2377bcefad",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b18fe89818e2377bcefad"
+      },
+      "source": "task:693b183d89818e2377bcef9d:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T19:18:22.496Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b19ec89818e2377bcefd4",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 4.28,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b19ec89818e2377bcefd2",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b19ec89818e2377bcefd2"
+      },
+      "source": "task:693b19d989818e2377bcefc2:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T19:22:20.925Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b1a1c89818e2377bcf011",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 3.48,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b1a1c89818e2377bcf00f",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b1a1c89818e2377bcf00f"
+      },
+      "source": "task:693b1a1489818e2377bcefff:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T19:23:08.167Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b1cd389818e2377bcf076",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.38,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b1cd289818e2377bcf074",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b1cd289818e2377bcf074"
+      },
+      "source": "task:693b1cc989818e2377bcf064:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T19:34:43.076Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b29e089818e2377bcf143",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 1.94,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b29e089818e2377bcf141",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b29e089818e2377bcf141"
+      },
+      "source": "task:693b29cd89818e2377bcf131:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T20:30:24.397Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b2a2089818e2377bcf168",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.6,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b2a2089818e2377bcf166",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b2a2089818e2377bcf166"
+      },
+      "source": "task:693b2a0589818e2377bcf156:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T20:31:28.708Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b328489818e2377bcf1c9",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.54,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b328489818e2377bcf1c7",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b328489818e2377bcf1c7"
+      },
+      "source": "task:693b31e489818e2377bcf1b7:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T21:07:16.423Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b3ba389818e2377bcfdad",
+    "userId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "username": "MK001",
+    "amount": 2.38,
+    "type": "commission",
+    "direction": "credit",
+    "status": "completed",
+    "reference": "commission:693b3ba289818e2377bcfdab",
+    "metadata": {
+      "commissionId": {
+        "$oid": "693b3ba289818e2377bcfdab"
+      },
+      "source": "task:693b38f989818e2377bcf98d:completed"
+    },
+    "createdAt": {
+      "$date": "2025-12-11T21:46:11.075Z"
+    },
+    "__v": 0
+  }
+]

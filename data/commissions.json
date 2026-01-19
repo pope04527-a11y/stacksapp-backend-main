@@ -1,0 +1,2984 @@
+[
+  {
+    "_id": "692b3f7f72c081ef957a191e",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 0.39,
+    "referralAmount": 0.08,
+    "sourceReference": "task:692b3f3e72c081ef957a1905:completed",
+    "note": "Referral from task 692b3f3e72c081ef957a1905",
+    "createdAt": {
+      "$date": "2025-11-29T18:46:23.507Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T18:46:23.507Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b3fa772c081ef957a1943",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 1.65,
+    "referralAmount": 0.33,
+    "sourceReference": "task:692b3f9f72c081ef957a1938:completed",
+    "note": "Referral from task 692b3f9f72c081ef957a1938",
+    "createdAt": {
+      "$date": "2025-11-29T18:47:03.918Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T18:47:03.918Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b49dc079268705119e1b7",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 2.8,
+    "referralAmount": 0.56,
+    "sourceReference": "task:692b49bd079268705119e196:completed",
+    "note": "Referral from task 692b49bd079268705119e196",
+    "createdAt": {
+      "$date": "2025-11-29T19:30:36.459Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T19:30:36.734Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b5aeefacd1e2224e78697",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 2.73,
+    "referralAmount": 0.55,
+    "sourceReference": "task:692b5ae4facd1e2224e7868c:completed",
+    "note": "Referral from task 692b5ae4facd1e2224e7868c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T20:43:26.710Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T20:43:26.710Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b5aeefacd1e2224e78699"
+    },
+    "inviterBalanceAfter": 1683.4500000000005,
+    "createdAt": {
+      "$date": "2025-11-29T20:43:26.289Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T20:43:26.710Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b5e08facd1e2224e786e8",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 1.68,
+    "referralAmount": 0.34,
+    "sourceReference": "task:692b5df8facd1e2224e786dd:completed",
+    "note": "Referral from task 692b5df8facd1e2224e786dd",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T20:56:40.625Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T20:56:40.625Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b5e08facd1e2224e786ea"
+    },
+    "inviterBalanceAfter": 1683.7900000000004,
+    "createdAt": {
+      "$date": "2025-11-29T20:56:40.212Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T20:56:40.625Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68639b70377388d91aef",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 4.98,
+    "referralAmount": 1,
+    "sourceReference": "task:692b68579b70377388d91ae4:completed",
+    "note": "Referral from task 692b68579b70377388d91ae4",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:40:52.240Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:40:52.240Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b68639b70377388d91af1"
+    },
+    "inviterBalanceAfter": 1684.7900000000004,
+    "createdAt": {
+      "$date": "2025-11-29T21:40:51.827Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:40:52.241Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68779b70377388d91b07",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 3.85,
+    "referralAmount": 0.77,
+    "sourceReference": "task:692b686e9b70377388d91afc:completed",
+    "note": "Referral from task 692b686e9b70377388d91afc",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:41:12.264Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:41:12.264Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b68779b70377388d91b09"
+    },
+    "inviterBalanceAfter": 1685.5600000000004,
+    "createdAt": {
+      "$date": "2025-11-29T21:41:11.859Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:41:12.264Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b68869b70377388d91b1f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 4.38,
+    "referralAmount": 0.88,
+    "sourceReference": "task:692b687f9b70377388d91b14:completed",
+    "note": "Referral from task 692b687f9b70377388d91b14",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:41:27.188Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:41:27.188Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b68869b70377388d91b21"
+    },
+    "inviterBalanceAfter": 1686.4400000000005,
+    "createdAt": {
+      "$date": "2025-11-29T21:41:26.783Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:41:27.189Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69c29b70377388d91b4c",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.36,
+    "referralAmount": 1.67,
+    "sourceReference": "task:692b69b99b70377388d91b41:completed",
+    "note": "Referral from task 692b69b99b70377388d91b41",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:46:43.266Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:46:43.266Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b69c29b70377388d91b4e"
+    },
+    "inviterBalanceAfter": 1688.1100000000006,
+    "createdAt": {
+      "$date": "2025-11-29T21:46:42.856Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:46:43.266Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69d09b70377388d91b64",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 4.5,
+    "referralAmount": 0.9,
+    "sourceReference": "task:692b69c99b70377388d91b59:completed",
+    "note": "Referral from task 692b69c99b70377388d91b59",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:46:57.117Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:46:57.117Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b69d09b70377388d91b66"
+    },
+    "inviterBalanceAfter": 1689.0100000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:46:56.710Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:46:57.118Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69de9b70377388d91b7c",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 4.95,
+    "referralAmount": 0.99,
+    "sourceReference": "task:692b69d89b70377388d91b71:completed",
+    "note": "Referral from task 692b69d89b70377388d91b71",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:47:10.462Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:47:10.462Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b69de9b70377388d91b7e"
+    },
+    "inviterBalanceAfter": 1690.0000000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:47:10.054Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:47:10.462Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69ec9b70377388d91b94",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 4.67,
+    "referralAmount": 0.93,
+    "sourceReference": "task:692b69e59b70377388d91b89:completed",
+    "note": "Referral from task 692b69e59b70377388d91b89",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:47:25.184Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:47:25.184Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b69ec9b70377388d91b96"
+    },
+    "inviterBalanceAfter": 1690.9300000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:47:24.777Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:47:25.185Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b69fe9b70377388d91bac",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 3.51,
+    "referralAmount": 0.7,
+    "sourceReference": "task:692b69f39b70377388d91ba1:completed",
+    "note": "Referral from task 692b69f39b70377388d91ba1",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:47:42.752Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:47:42.752Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b69fe9b70377388d91bae"
+    },
+    "inviterBalanceAfter": 1691.6300000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:47:42.345Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:47:42.752Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a5d9b70377388d91be6",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 88.44,
+    "referralAmount": 17.69,
+    "sourceReference": "task:692b6a059b70377388d91bb9:completed",
+    "note": "Referral from combo task 692b6a059b70377388d91bb9",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:49:18.195Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:49:18.195Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6a5d9b70377388d91be8"
+    },
+    "inviterBalanceAfter": 1709.3200000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:49:17.781Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:49:18.195Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a739b70377388d91c07",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.64,
+    "referralAmount": 1.53,
+    "sourceReference": "task:692b6a6d9b70377388d91bfc:completed",
+    "note": "Referral from task 692b6a6d9b70377388d91bfc",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:49:40.018Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:49:40.018Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6a739b70377388d91c09"
+    },
+    "inviterBalanceAfter": 1710.8500000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:49:39.611Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:49:40.018Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a7f9b70377388d91c1f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.75,
+    "referralAmount": 1.95,
+    "sourceReference": "task:692b6a7a9b70377388d91c14:completed",
+    "note": "Referral from task 692b6a7a9b70377388d91c14",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:49:52.389Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:49:52.389Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6a809b70377388d91c21"
+    },
+    "inviterBalanceAfter": 1712.8000000000009,
+    "createdAt": {
+      "$date": "2025-11-29T21:49:51.982Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:49:52.389Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a8d9b70377388d91c37",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.8,
+    "referralAmount": 1.76,
+    "sourceReference": "task:692b6a869b70377388d91c2c:completed",
+    "note": "Referral from task 692b6a869b70377388d91c2c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:50:05.594Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:50:05.594Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6a8d9b70377388d91c39"
+    },
+    "inviterBalanceAfter": 1714.5600000000009,
+    "createdAt": {
+      "$date": "2025-11-29T21:50:05.187Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:50:05.594Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6a9a9b70377388d91c4f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.97,
+    "referralAmount": 2.59,
+    "sourceReference": "task:692b6a949b70377388d91c44:completed",
+    "note": "Referral from task 692b6a949b70377388d91c44",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:50:19.106Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:50:19.106Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6a9a9b70377388d91c51"
+    },
+    "inviterBalanceAfter": 1717.1500000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:50:18.698Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:50:19.106Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6aa99b70377388d91c67",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.39,
+    "referralAmount": 1.68,
+    "sourceReference": "task:692b6aa39b70377388d91c5c:completed",
+    "note": "Referral from task 692b6aa39b70377388d91c5c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:50:33.433Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:50:33.433Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6aa99b70377388d91c69"
+    },
+    "inviterBalanceAfter": 1718.8300000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:50:33.027Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:50:33.434Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ab69b70377388d91c7f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 13.2,
+    "referralAmount": 2.64,
+    "sourceReference": "task:692b6ab09b70377388d91c74:completed",
+    "note": "Referral from task 692b6ab09b70377388d91c74",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:50:47.173Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:50:47.173Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6ab69b70377388d91c81"
+    },
+    "inviterBalanceAfter": 1721.470000000001,
+    "createdAt": {
+      "$date": "2025-11-29T21:50:46.766Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:50:47.173Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ac49b70377388d91c97",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.64,
+    "referralAmount": 1.53,
+    "sourceReference": "task:692b6abd9b70377388d91c8c:completed",
+    "note": "Referral from task 692b6abd9b70377388d91c8c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:51:00.864Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:51:00.864Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6ac49b70377388d91c99"
+    },
+    "inviterBalanceAfter": 1723.000000000001,
+    "createdAt": {
+      "$date": "2025-11-29T21:51:00.455Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:51:00.864Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ad39b70377388d91caf",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.1,
+    "referralAmount": 1.02,
+    "sourceReference": "task:692b6acb9b70377388d91ca4:completed",
+    "note": "Referral from task 692b6acb9b70377388d91ca4",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:51:16.286Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:51:16.286Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6ad49b70377388d91cb1"
+    },
+    "inviterBalanceAfter": 1724.020000000001,
+    "createdAt": {
+      "$date": "2025-11-29T21:51:15.881Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:51:16.287Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ae09b70377388d91cc7",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.2,
+    "referralAmount": 2.44,
+    "sourceReference": "task:692b6ada9b70377388d91cbc:completed",
+    "note": "Referral from task 692b6ada9b70377388d91cbc",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:51:29.384Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:51:29.384Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6ae19b70377388d91cc9"
+    },
+    "inviterBalanceAfter": 1726.460000000001,
+    "createdAt": {
+      "$date": "2025-11-29T21:51:28.977Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:51:29.385Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6aee9b70377388d91cdf",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.65,
+    "referralAmount": 2.53,
+    "sourceReference": "task:692b6ae89b70377388d91cd4:completed",
+    "note": "Referral from task 692b6ae89b70377388d91cd4",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:51:43.278Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:51:43.278Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6aef9b70377388d91ce1"
+    },
+    "inviterBalanceAfter": 1728.990000000001,
+    "createdAt": {
+      "$date": "2025-11-29T21:51:42.872Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:51:43.278Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6afd9b70377388d91cf7",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.5,
+    "referralAmount": 1.1,
+    "sourceReference": "task:692b6af69b70377388d91cec:completed",
+    "note": "Referral from task 692b6af69b70377388d91cec",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:51:57.716Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:51:57.716Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6afd9b70377388d91cf9"
+    },
+    "inviterBalanceAfter": 1730.0900000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:51:57.309Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:51:57.716Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b0c9b70377388d91d0f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.65,
+    "referralAmount": 2.53,
+    "sourceReference": "task:692b6b059b70377388d91d04:completed",
+    "note": "Referral from task 692b6b059b70377388d91d04",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:52:12.503Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:52:12.503Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b0c9b70377388d91d11"
+    },
+    "inviterBalanceAfter": 1732.6200000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:52:12.096Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:52:12.503Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b1e9b70377388d91d27",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.68,
+    "referralAmount": 1.94,
+    "sourceReference": "task:692b6b179b70377388d91d1c:completed",
+    "note": "Referral from task 692b6b179b70377388d91d1c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:52:30.427Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:52:30.427Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b1e9b70377388d91d29"
+    },
+    "inviterBalanceAfter": 1734.5600000000009,
+    "createdAt": {
+      "$date": "2025-11-29T21:52:30.019Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:52:30.427Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b2d9b70377388d91d3f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 10.2,
+    "referralAmount": 2.04,
+    "sourceReference": "task:692b6b259b70377388d91d34:completed",
+    "note": "Referral from task 692b6b259b70377388d91d34",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:52:45.685Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:52:45.685Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b2d9b70377388d91d41"
+    },
+    "inviterBalanceAfter": 1736.6000000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:52:45.279Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:52:45.686Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b3b9b70377388d91d57",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.11,
+    "referralAmount": 1.02,
+    "sourceReference": "task:692b6b349b70377388d91d4c:completed",
+    "note": "Referral from task 692b6b349b70377388d91d4c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:53:00.213Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:53:00.213Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b3b9b70377388d91d59"
+    },
+    "inviterBalanceAfter": 1737.6200000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:52:59.806Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:53:00.213Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b499b70377388d91d6f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.28,
+    "referralAmount": 1.06,
+    "sourceReference": "task:692b6b429b70377388d91d64:completed",
+    "note": "Referral from task 692b6b429b70377388d91d64",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:53:14.049Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:53:14.049Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b499b70377388d91d71"
+    },
+    "inviterBalanceAfter": 1738.6800000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:53:13.643Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:53:14.049Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6b739b70377388d91d90",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 15,
+    "referralAmount": 3,
+    "sourceReference": "task:692b6b6b9b70377388d91d85:completed",
+    "note": "Referral from task 692b6b6b9b70377388d91d85",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:53:56.358Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:53:56.358Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6b749b70377388d91d92"
+    },
+    "inviterBalanceAfter": 1741.6800000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:53:55.953Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:53:56.359Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6ba09b70377388d91dbb",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.08,
+    "referralAmount": 1.42,
+    "sourceReference": "task:692b6b7b9b70377388d91d9d:completed",
+    "note": "Referral from task 692b6b7b9b70377388d91d9d",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:54:41.091Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:54:41.091Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6ba09b70377388d91dbd"
+    },
+    "inviterBalanceAfter": 1743.1000000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:54:40.685Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:54:41.091Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bb89b70377388d91ddb",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.87,
+    "referralAmount": 1.77,
+    "sourceReference": "task:692b6ba89b70377388d91dd0:completed",
+    "note": "Referral from task 692b6ba89b70377388d91dd0",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:55:05.089Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:55:05.089Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6bb89b70377388d91ddd"
+    },
+    "inviterBalanceAfter": 1744.8700000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:55:04.680Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:55:05.089Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bc99b70377388d91df3",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.28,
+    "referralAmount": 1.26,
+    "sourceReference": "task:692b6bc09b70377388d91de8:completed",
+    "note": "Referral from task 692b6bc09b70377388d91de8",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:55:22.306Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:55:22.306Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6bca9b70377388d91df5"
+    },
+    "inviterBalanceAfter": 1746.1300000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:55:21.898Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:55:22.306Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bdb9b70377388d91e0b",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.4,
+    "referralAmount": 1.08,
+    "sourceReference": "task:692b6bd29b70377388d91e00:completed",
+    "note": "Referral from task 692b6bd29b70377388d91e00",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:55:39.924Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:55:39.924Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6bdb9b70377388d91e0d"
+    },
+    "inviterBalanceAfter": 1747.2100000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:55:39.516Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:55:39.924Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bec9b70377388d91e23",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.38,
+    "referralAmount": 1.28,
+    "sourceReference": "task:692b6be29b70377388d91e18:completed",
+    "note": "Referral from task 692b6be29b70377388d91e18",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:55:57.276Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:55:57.276Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6bed9b70377388d91e25"
+    },
+    "inviterBalanceAfter": 1748.4900000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:55:56.868Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:55:57.276Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6bfb9b70377388d91e3b",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 13.31,
+    "referralAmount": 2.66,
+    "sourceReference": "task:692b6bf59b70377388d91e30:completed",
+    "note": "Referral from task 692b6bf59b70377388d91e30",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:56:12.108Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:56:12.108Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6bfb9b70377388d91e3d"
+    },
+    "inviterBalanceAfter": 1751.1500000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:56:11.701Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:56:12.108Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c0c9b70377388d91e53",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.12,
+    "referralAmount": 1.62,
+    "sourceReference": "task:692b6c059b70377388d91e48:completed",
+    "note": "Referral from task 692b6c059b70377388d91e48",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:56:28.917Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:56:28.917Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c0c9b70377388d91e55"
+    },
+    "inviterBalanceAfter": 1752.7700000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:56:28.511Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:56:28.917Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c1a9b70377388d91e6b",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 13.84,
+    "referralAmount": 2.77,
+    "sourceReference": "task:692b6c139b70377388d91e60:completed",
+    "note": "Referral from task 692b6c139b70377388d91e60",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:56:43.254Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:56:43.254Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c1a9b70377388d91e6d"
+    },
+    "inviterBalanceAfter": 1755.5400000000006,
+    "createdAt": {
+      "$date": "2025-11-29T21:56:42.847Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:56:43.254Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c2b9b70377388d91e83",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.37,
+    "referralAmount": 1.67,
+    "sourceReference": "task:692b6c229b70377388d91e78:completed",
+    "note": "Referral from task 692b6c229b70377388d91e78",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:57:00.024Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:57:00.024Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c2b9b70377388d91e85"
+    },
+    "inviterBalanceAfter": 1757.2100000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:56:59.617Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:57:00.024Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c3b9b70377388d91e9b",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.39,
+    "referralAmount": 1.28,
+    "sourceReference": "task:692b6c349b70377388d91e90:completed",
+    "note": "Referral from task 692b6c349b70377388d91e90",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:57:16.202Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:57:16.202Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c3b9b70377388d91e9d"
+    },
+    "inviterBalanceAfter": 1758.4900000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:57:15.784Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:57:16.202Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c4b9b70377388d91eb3",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.39,
+    "referralAmount": 1.68,
+    "sourceReference": "task:692b6c449b70377388d91ea8:completed",
+    "note": "Referral from task 692b6c449b70377388d91ea8",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:57:31.570Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:57:31.570Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c4b9b70377388d91eb5"
+    },
+    "inviterBalanceAfter": 1760.1700000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:57:31.163Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:57:31.570Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c5d9b70377388d91ecb",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.25,
+    "referralAmount": 1.25,
+    "sourceReference": "task:692b6c559b70377388d91ec0:completed",
+    "note": "Referral from task 692b6c559b70377388d91ec0",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:57:49.637Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:57:49.637Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c5d9b70377388d91ecd"
+    },
+    "inviterBalanceAfter": 1761.4200000000008,
+    "createdAt": {
+      "$date": "2025-11-29T21:57:49.231Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:57:49.638Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c6c9b70377388d91ee3",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 15.58,
+    "referralAmount": 3.12,
+    "sourceReference": "task:692b6c659b70377388d91ed8:completed",
+    "note": "Referral from task 692b6c659b70377388d91ed8",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:58:05.048Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:58:05.048Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c6c9b70377388d91ee5"
+    },
+    "inviterBalanceAfter": 1764.5400000000006,
+    "createdAt": {
+      "$date": "2025-11-29T21:58:04.627Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:58:05.048Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692b6c7b9b70377388d91efb",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.19,
+    "referralAmount": 2.44,
+    "sourceReference": "task:692b6c739b70377388d91ef0:completed",
+    "note": "Referral from task 692b6c739b70377388d91ef0",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-29T21:58:20.219Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-29T21:58:20.219Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692b6c7b9b70377388d91efd"
+    },
+    "inviterBalanceAfter": 1766.9800000000007,
+    "createdAt": {
+      "$date": "2025-11-29T21:58:19.812Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-29T21:58:20.219Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf227906d13b970862428",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 16.62,
+    "referralAmount": 3.32,
+    "sourceReference": "task:692befa7906d13b97086241d:completed",
+    "note": "Referral from task 692befa7906d13b97086241d",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T07:28:39.869Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T07:28:39.869Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bf227906d13b97086242a"
+    },
+    "inviterBalanceAfter": 2130.9700000000007,
+    "createdAt": {
+      "$date": "2025-11-30T07:28:39.448Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T07:28:39.869Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf31f906d13b970862489",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 17.39,
+    "referralAmount": 3.48,
+    "sourceReference": "task:692bf2a0906d13b970862446:completed",
+    "note": "Referral from task 692bf2a0906d13b970862446",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T07:32:47.461Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T07:32:47.461Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bf31f906d13b97086248b"
+    },
+    "inviterBalanceAfter": 2151.9100000000003,
+    "createdAt": {
+      "$date": "2025-11-30T07:32:47.050Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T07:32:47.461Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf532906d13b9708624b2",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.2,
+    "referralAmount": 2.44,
+    "sourceReference": "task:692bf522906d13b9708624a7:completed",
+    "note": "Referral from task 692bf522906d13b9708624a7",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T07:41:39.212Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T07:41:39.212Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bf532906d13b9708624b4"
+    },
+    "inviterBalanceAfter": 2154.3500000000004,
+    "createdAt": {
+      "$date": "2025-11-30T07:41:38.801Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T07:41:39.212Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bf9fe906d13b9708625ae",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.78,
+    "referralAmount": 1.56,
+    "sourceReference": "task:692bf9eb906d13b9708625a3:completed",
+    "note": "Referral from task 692bf9eb906d13b9708625a3",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:02:07.207Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:02:07.207Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bf9fe906d13b9708625b0"
+    },
+    "inviterBalanceAfter": 2232.98,
+    "createdAt": {
+      "$date": "2025-11-30T08:02:06.794Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:02:07.207Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfa10906d13b9708625c6",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 8.44,
+    "referralAmount": 1.69,
+    "sourceReference": "task:692bfa03906d13b9708625bb:completed",
+    "note": "Referral from task 692bfa03906d13b9708625bb",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:02:25.240Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:02:25.240Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bfa10906d13b9708625c8"
+    },
+    "inviterBalanceAfter": 2234.67,
+    "createdAt": {
+      "$date": "2025-11-30T08:02:24.828Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:02:25.240Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfb2a906d13b9708625fd",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.65,
+    "referralAmount": 1.53,
+    "sourceReference": "task:692bfa62906d13b9708625d3:completed",
+    "note": "Referral from task 692bfa62906d13b9708625d3",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:07:07.241Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:07:07.241Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bfb2a906d13b9708625ff"
+    },
+    "inviterBalanceAfter": 2236.2000000000003,
+    "createdAt": {
+      "$date": "2025-11-30T08:07:06.828Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:07:07.241Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfeb5906d13b97086265f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.47,
+    "referralAmount": 1.89,
+    "sourceReference": "task:692bfb33906d13b970862612:completed",
+    "note": "Referral from task 692bfb33906d13b970862612",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:22:13.868Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:22:13.868Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bfeb5906d13b970862661"
+    },
+    "inviterBalanceAfter": 967.3400000000003,
+    "createdAt": {
+      "$date": "2025-11-30T08:22:13.454Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:22:13.868Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bfff3906d13b9708626c5",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.58,
+    "referralAmount": 1.12,
+    "sourceReference": "task:692bfeca906d13b970862684:completed",
+    "note": "Referral from task 692bfeca906d13b970862684",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:27:31.615Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:27:31.615Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bfff3906d13b9708626c7"
+    },
+    "inviterBalanceAfter": 2265.96,
+    "createdAt": {
+      "$date": "2025-11-30T08:27:31.203Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:27:31.615Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692bffff906d13b9708626dd",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 13,
+    "referralAmount": 2.6,
+    "sourceReference": "task:692bfff9906d13b9708626d2:completed",
+    "note": "Referral from task 692bfff9906d13b9708626d2",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:27:43.464Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:27:43.464Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692bffff906d13b9708626e0"
+    },
+    "inviterBalanceAfter": 2268.56,
+    "createdAt": {
+      "$date": "2025-11-30T08:27:43.053Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:27:43.464Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0018906d13b970862706",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.58,
+    "referralAmount": 1.12,
+    "sourceReference": "task:692c0010906d13b9708626fb:completed",
+    "note": "Referral from task 692c0010906d13b9708626fb",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:28:08.910Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:28:08.910Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c0018906d13b970862708"
+    },
+    "inviterBalanceAfter": 2269.68,
+    "createdAt": {
+      "$date": "2025-11-30T08:28:08.499Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:28:08.910Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0035906d13b97086271e",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.14,
+    "referralAmount": 1.23,
+    "sourceReference": "task:692c001d906d13b970862713:completed",
+    "note": "Referral from task 692c001d906d13b970862713",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:28:38.100Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:28:38.100Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c0035906d13b970862720"
+    },
+    "inviterBalanceAfter": 2270.91,
+    "createdAt": {
+      "$date": "2025-11-30T08:28:37.689Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:28:38.100Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c024c906d13b970862785",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.32,
+    "referralAmount": 1.26,
+    "sourceReference": "task:692c0242906d13b97086277a:completed",
+    "note": "Referral from task 692c0242906d13b97086277a",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:37:32.748Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:37:32.748Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c024c906d13b970862787"
+    },
+    "inviterBalanceAfter": 1491.1699999999998,
+    "createdAt": {
+      "$date": "2025-11-30T08:37:32.336Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:37:32.748Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04a4906d13b9708627ae",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.8,
+    "referralAmount": 1.56,
+    "sourceReference": "task:692c049c906d13b9708627a3:completed",
+    "note": "Referral from task 692c049c906d13b9708627a3",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:47:32.925Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:47:32.925Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c04a4906d13b9708627b0"
+    },
+    "inviterBalanceAfter": 1492.7299999999998,
+    "createdAt": {
+      "$date": "2025-11-30T08:47:32.509Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:47:32.925Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04c3906d13b9708627df",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 88.44,
+    "referralAmount": 17.69,
+    "sourceReference": "task:692c04a9906d13b9708627bb:completed",
+    "note": "Referral from combo task 692c04a9906d13b9708627bb",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:48:04.100Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:48:04.100Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c04c3906d13b9708627e1"
+    },
+    "inviterBalanceAfter": 1510.4199999999998,
+    "createdAt": {
+      "$date": "2025-11-30T08:48:03.688Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:48:04.100Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04d7906d13b9708627ff",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.38,
+    "referralAmount": 1.28,
+    "sourceReference": "task:692c04cc906d13b9708627f4:completed",
+    "note": "Referral from task 692c04cc906d13b9708627f4",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:48:24.145Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:48:24.145Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c04d7906d13b970862801"
+    },
+    "inviterBalanceAfter": 1511.6999999999998,
+    "createdAt": {
+      "$date": "2025-11-30T08:48:23.734Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:48:24.145Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04e4906d13b970862817",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.7,
+    "referralAmount": 1.54,
+    "sourceReference": "task:692c04dd906d13b97086280c:completed",
+    "note": "Referral from task 692c04dd906d13b97086280c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:48:37.283Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:48:37.283Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c04e5906d13b970862819"
+    },
+    "inviterBalanceAfter": 1513.2399999999998,
+    "createdAt": {
+      "$date": "2025-11-30T08:48:36.871Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:48:37.283Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c04fc906d13b97086282f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.82,
+    "referralAmount": 1.16,
+    "sourceReference": "task:692c04e9906d13b970862824:completed",
+    "note": "Referral from task 692c04e9906d13b970862824",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:49:00.447Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:49:00.447Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c04fc906d13b970862831"
+    },
+    "inviterBalanceAfter": 1514.3999999999999,
+    "createdAt": {
+      "$date": "2025-11-30T08:49:00.035Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:49:00.448Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0574906d13b97086289c",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 10.56,
+    "referralAmount": 2.11,
+    "sourceReference": "task:692c0501906d13b97086283c:completed",
+    "note": "Referral from task 692c0501906d13b97086283c",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:51:00.797Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:51:00.797Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c0574906d13b97086289e"
+    },
+    "inviterBalanceAfter": 480.6900000000004,
+    "createdAt": {
+      "$date": "2025-11-30T08:51:00.386Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:51:00.798Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c05a7906d13b9708628b6",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 19.17,
+    "referralAmount": 3.83,
+    "sourceReference": "task:692c057a906d13b9708628a9:completed",
+    "note": "Referral from task 692c057a906d13b9708628a9",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T08:51:52.233Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T08:51:52.233Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c05a7906d13b9708628b8"
+    },
+    "inviterBalanceAfter": 484.5200000000004,
+    "createdAt": {
+      "$date": "2025-11-30T08:51:51.804Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T08:51:52.233Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c0f63906d13b970862a08",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 16.58,
+    "referralAmount": 3.32,
+    "sourceReference": "task:692c0f5a906d13b9708629fd:completed",
+    "note": "Referral from task 692c0f5a906d13b9708629fd",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T09:33:23.998Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T09:33:23.998Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c0f63906d13b970862a0a"
+    },
+    "inviterBalanceAfter": 2385.4600000000005,
+    "createdAt": {
+      "$date": "2025-11-30T09:33:23.578Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T09:33:23.998Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "692c2311906d13b970862e19",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.47,
+    "referralAmount": 1.89,
+    "sourceReference": "task:692c2309906d13b970862e0e:completed",
+    "note": "Referral from task 692c2309906d13b970862e0e",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-11-30T10:57:21.790Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-11-30T10:57:21.790Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "692c2311906d13b970862e1b"
+    },
+    "inviterBalanceAfter": 2403.1200000000003,
+    "createdAt": {
+      "$date": "2025-11-30T10:57:21.370Z"
+    },
+    "updatedAt": {
+      "$date": "2025-11-30T10:57:21.790Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "69317414a0f1e33799bdefc1",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 14.19,
+    "referralAmount": 2.84,
+    "sourceReference": "task:69317403a0f1e33799bdefb6:completed",
+    "note": "Referral from task 69317403a0f1e33799bdefb6",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-04T11:44:21.304Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-04T11:44:21.304Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "69317415a0f1e33799bdefc3"
+    },
+    "inviterBalanceAfter": 2449.6500000000005,
+    "createdAt": {
+      "$date": "2025-12-04T11:44:20.876Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-04T11:44:21.304Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "69346833f52f8ac5feef1fc7",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 14,
+    "referralAmount": 2.8,
+    "sourceReference": "task:6934682ef52f8ac5feef1fbc:completed",
+    "note": "Referral from task 6934682ef52f8ac5feef1fbc",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-06T17:30:28.346Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-06T17:30:28.346Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "69346834f52f8ac5feef1fca"
+    },
+    "inviterBalanceAfter": 2475.7400000000007,
+    "createdAt": {
+      "$date": "2025-12-06T17:30:27.908Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-06T17:30:28.346Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936f747ffc7616f4dcb4d50",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.5,
+    "referralAmount": 1.9,
+    "sourceReference": "task:6936f741ffc7616f4dcb4d43:completed",
+    "note": "Referral from task 6936f741ffc7616f4dcb4d43",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T16:05:28.121Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T16:05:28.121Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "6936f747ffc7616f4dcb4d52"
+    },
+    "inviterBalanceAfter": 2503.1300000000006,
+    "createdAt": {
+      "$date": "2025-12-08T16:05:27.687Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T16:05:28.122Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fa47ca7c877937704ab5",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.82,
+    "referralAmount": 1.16,
+    "sourceReference": "task:6936fa41ca7c877937704aa8:completed",
+    "note": "Referral from task 6936fa41ca7c877937704aa8",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T16:18:15.952Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T16:18:15.952Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "6936fa47ca7c877937704ab7"
+    },
+    "inviterBalanceAfter": 2504.2900000000004,
+    "createdAt": {
+      "$date": "2025-12-08T16:18:15.531Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T16:18:15.952Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fa54ca7c877937704ad1",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 19.38,
+    "referralAmount": 3.88,
+    "sourceReference": "task:6936fa4dca7c877937704ac4:completed",
+    "note": "Referral from task 6936fa4dca7c877937704ac4",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T16:18:28.576Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T16:18:28.576Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "6936fa54ca7c877937704ad3"
+    },
+    "inviterBalanceAfter": 2508.1700000000005,
+    "createdAt": {
+      "$date": "2025-12-08T16:18:28.166Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T16:18:28.576Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6936fb9cca7c877937704b3c",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 18.18,
+    "referralAmount": 3.64,
+    "sourceReference": "task:6936fb95ca7c877937704b2f:completed",
+    "note": "Referral from task 6936fb95ca7c877937704b2f",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T16:23:57.181Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T16:23:57.181Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "6936fb9cca7c877937704b3e"
+    },
+    "inviterBalanceAfter": 2511.8100000000004,
+    "createdAt": {
+      "$date": "2025-12-08T16:23:56.766Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T16:23:57.182Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693716ff70c0ffbb181dcfe5",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.21,
+    "referralAmount": 1.24,
+    "sourceReference": "task:693716f870c0ffbb181dcfd8:completed",
+    "note": "Referral from task 693716f870c0ffbb181dcfd8",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T18:20:48.038Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T18:20:48.038Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693716ff70c0ffbb181dcfe7"
+    },
+    "inviterBalanceAfter": 2513.05,
+    "createdAt": {
+      "$date": "2025-12-08T18:20:47.604Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T18:20:48.039Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "6937174270c0ffbb181dd014",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 6.94,
+    "referralAmount": 1.39,
+    "sourceReference": "task:6937173a70c0ffbb181dd007:completed",
+    "note": "Referral from task 6937173a70c0ffbb181dd007",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-08T18:21:55.079Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-08T18:21:55.079Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "6937174270c0ffbb181dd016"
+    },
+    "inviterBalanceAfter": 2514.44,
+    "createdAt": {
+      "$date": "2025-12-08T18:21:54.670Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-08T18:21:55.079Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b063a89818e2377bcee90",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 20.32,
+    "referralAmount": 4.06,
+    "sourceReference": "task:693b062489818e2377bcee80:completed",
+    "note": "Referral from task 693b062489818e2377bcee80",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T17:58:19.391Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T17:58:19.391Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b063b89818e2377bcee92"
+    },
+    "inviterBalanceAfter": 2518.5,
+    "createdAt": {
+      "$date": "2025-12-11T17:58:18.955Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T17:58:19.391Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b16ab89818e2377bcef82",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 5.98,
+    "referralAmount": 1.2,
+    "sourceReference": "task:693b16a189818e2377bcef72:completed",
+    "note": "Referral from task 693b16a189818e2377bcef72",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T19:08:27.768Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T19:08:27.768Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b16ab89818e2377bcef84"
+    },
+    "inviterBalanceAfter": 2519.7,
+    "createdAt": {
+      "$date": "2025-12-11T19:08:27.343Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T19:08:27.769Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b18fe89818e2377bcefad",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 7.08,
+    "referralAmount": 1.42,
+    "sourceReference": "task:693b183d89818e2377bcef9d:completed",
+    "note": "Referral from task 693b183d89818e2377bcef9d",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T19:18:22.772Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T19:18:22.772Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b18fe89818e2377bcefaf"
+    },
+    "inviterBalanceAfter": 2521.12,
+    "createdAt": {
+      "$date": "2025-12-11T19:18:22.359Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T19:18:22.773Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b19ec89818e2377bcefd2",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 21.42,
+    "referralAmount": 4.28,
+    "sourceReference": "task:693b19d989818e2377bcefc2:completed",
+    "note": "Referral from task 693b19d989818e2377bcefc2",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T19:22:21.201Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T19:22:21.201Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b19ec89818e2377bcefd4"
+    },
+    "inviterBalanceAfter": 2525.4,
+    "createdAt": {
+      "$date": "2025-12-11T19:22:20.788Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T19:22:21.201Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b1a1c89818e2377bcf00f",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 17.39,
+    "referralAmount": 3.48,
+    "sourceReference": "task:693b1a1489818e2377bcefff:completed",
+    "note": "Referral from task 693b1a1489818e2377bcefff",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T19:23:08.442Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T19:23:08.442Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b1a1c89818e2377bcf011"
+    },
+    "inviterBalanceAfter": 2528.88,
+    "createdAt": {
+      "$date": "2025-12-11T19:23:08.029Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T19:23:08.443Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b1cd289818e2377bcf074",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 11.88,
+    "referralAmount": 2.38,
+    "sourceReference": "task:693b1cc989818e2377bcf064:completed",
+    "note": "Referral from task 693b1cc989818e2377bcf064",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T19:34:43.350Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T19:34:43.350Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b1cd389818e2377bcf076"
+    },
+    "inviterBalanceAfter": 2531.26,
+    "createdAt": {
+      "$date": "2025-12-11T19:34:42.938Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T19:34:43.350Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b29e089818e2377bcf141",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 9.68,
+    "referralAmount": 1.94,
+    "sourceReference": "task:693b29cd89818e2377bcf131:completed",
+    "note": "Referral from task 693b29cd89818e2377bcf131",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T20:30:24.675Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T20:30:24.675Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b29e089818e2377bcf143"
+    },
+    "inviterBalanceAfter": 2533.2000000000003,
+    "createdAt": {
+      "$date": "2025-12-11T20:30:24.255Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T20:30:24.676Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b2a2089818e2377bcf166",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 13,
+    "referralAmount": 2.6,
+    "sourceReference": "task:693b2a0589818e2377bcf156:completed",
+    "note": "Referral from task 693b2a0589818e2377bcf156",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T20:31:28.982Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T20:31:28.982Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b2a2089818e2377bcf168"
+    },
+    "inviterBalanceAfter": 2535.8,
+    "createdAt": {
+      "$date": "2025-12-11T20:31:28.572Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T20:31:28.982Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b328489818e2377bcf1c7",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 12.7,
+    "referralAmount": 2.54,
+    "sourceReference": "task:693b31e489818e2377bcf1b7:completed",
+    "note": "Referral from task 693b31e489818e2377bcf1b7",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T21:07:16.704Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T21:07:16.704Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b328489818e2377bcf1c9"
+    },
+    "inviterBalanceAfter": 2538.34,
+    "createdAt": {
+      "$date": "2025-12-11T21:07:16.280Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T21:07:16.704Z"
+    },
+    "__v": 0
+  },
+  {
+    "_id": "693b3ba289818e2377bcfdab",
+    "recipientUserId": {
+      "$oid": "6929ab8f7fdf52629acb8fbf"
+    },
+    "recipientInviteCode": "SU57R5",
+    "sourceUserId": {
+      "$oid": "692b3ebb72c081ef957a18c4"
+    },
+    "sourceType": "task",
+    "originalAmount": 11.89,
+    "referralAmount": 2.38,
+    "sourceReference": "task:693b38f989818e2377bcf98d:completed",
+    "note": "Referral from task 693b38f989818e2377bcf98d",
+    "status": "applied",
+    "processed": true,
+    "processedAt": {
+      "$date": "2025-12-11T21:46:11.354Z"
+    },
+    "applied": true,
+    "appliedAt": {
+      "$date": "2025-12-11T21:46:11.354Z"
+    },
+    "appliedBy": "system",
+    "transactionId": {
+      "$oid": "693b3ba389818e2377bcfdad"
+    },
+    "inviterBalanceAfter": 2540.7200000000003,
+    "createdAt": {
+      "$date": "2025-12-11T21:46:10.932Z"
+    },
+    "updatedAt": {
+      "$date": "2025-12-11T21:46:11.355Z"
+    },
+    "__v": 0
+  }
+]

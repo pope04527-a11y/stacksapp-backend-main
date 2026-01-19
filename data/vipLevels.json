@@ -1,0 +1,25 @@
+[
+  {
+    "_id": "683901ddcda774637f8317f7",
+    "VIP1": {
+      "tasksPerDay": 40,
+      "profitPerTask": 0.005,
+      "comboProfit": 0.03
+    },
+    "VIP2": {
+      "tasksPerDay": 45,
+      "profitPerTask": 0.01,
+      "comboProfit": 0.06
+    },
+    "VIP3": {
+      "tasksPerDay": 50,
+      "profitPerTask": 0.015,
+      "comboProfit": 0.09
+    },
+    "VIP4": {
+      "tasksPerDay": 55,
+      "profitPerTask": 0.02,
+      "comboProfit": 0.12
+    }
+  }
+]

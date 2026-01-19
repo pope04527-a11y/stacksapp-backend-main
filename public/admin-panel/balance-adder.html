@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin - Balance Adder</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .autocomplete-list {
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+      background: white;
+      position: absolute;
+      z-index: 10;
+      width: 90%;
+      left: 5%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .autocomplete-list div {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .autocomplete-list div:hover {
+      background: #f0f0f0;
+    }
+    .balance-display {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #007b00;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // Redirect to login if token missing
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      alert("Access denied. Please login.");
+      window.location.href = "/admin-panel/login.html";
+    }
+  </script>
+
+  <div class="main-content" id="mainContent">
+    <main class="dashboard-container">
+      <section class="admin-section">
+        <div class="section-header">
+          <h2>Add Balance to User</h2>
+        </div>
+        <form id="addBalanceForm" class="admin-form" autocomplete="off" style="position:relative;">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="Enter username..." required autocomplete="off" oninput="onUserInput()" />
+          <div id="autocomplete" class="autocomplete-list" style="display:none;"></div>
+
+          <div id="balanceDisplay" class="balance-display"></div>
+
+          <label for="amount">Amount</label>
+          <input type="number" id="amount" placeholder="Enter amount..." min="0.01" step="0.01" required />
+
+          <button type="submit" class="add-btn"><i class="fa fa-plus"></i> Add Balance</button>
+        </form>
+        <div id="lastAction" style="margin-top:1rem;"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let allUsersCache = [];
+    let selectedUser = null;
+
+    // Fetch all users for autocomplete
+    async function fetchAllUsers() {
+      try {
+        const res = await fetch("/admin/users", {
+          headers: { "x-admin-token": localStorage.getItem("adminToken") }
+        });
+        if (res.ok) {
+          allUsersCache = await res.json();
+        }
+      } catch {}
+    }
+
+    fetchAllUsers();
+
+    function onUserInput() {
+      const input = document.getElementById("username");
+      const query = input.value.trim().toLowerCase();
+      selectedUser = null;
+      document.getElementById('balanceDisplay').textContent = "";
+      if (!query) {
+        document.getElementById("autocomplete").style.display = "none";
+        return;
+      }
+      const matches = allUsersCache.filter(u => u.username && u.username.toLowerCase().includes(query));
+      showAutocomplete(matches, input);
+    }
+
+    function showAutocomplete(matches, input) {
+      const list = document.getElementById("autocomplete");
+      list.innerHTML = "";
+      if (matches.length === 0) {
+        list.style.display = "none";
+        return;
+      }
+      matches.slice(0, 8).forEach(u => {
+        const div = document.createElement("div");
+        div.textContent = `${u.username} (Balance: $${Number(u.balance || 0).toFixed(2)})`;
+        div.onclick = () => {
+          input.value = u.username;
+          selectUser(u.username);
+          list.style.display = "none";
+        };
+        list.appendChild(div);
+      });
+      list.style.display = "block";
+    }
+
+    async function selectUser(username) {
+      // Fetch user data for up-to-date balance
+      try {
+        const res = await fetch(`/admin/users/${encodeURIComponent(username)}`, {
+          headers: { "x-admin-token": localStorage.getItem("adminToken") }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          selectedUser = data.user;
+          document.getElementById('balanceDisplay').textContent =
+            `Current Balance: $${Number(selectedUser.balance || 0).toFixed(2)}`;
+        } else {
+          selectedUser = null;
+          document.getElementById('balanceDisplay').textContent = "User not found.";
+        }
+      } catch {
+        selectedUser = null;
+        document.getElementById('balanceDisplay').textContent = "Error fetching user.";
+      }
+    }
+
+    // Handle submission
+    document.getElementById("addBalanceForm").onsubmit = async function(e) {
+      e.preventDefault();
+      const username = document.getElementById("username").value.trim();
+      const amount = parseFloat(document.getElementById("amount").value);
+      if (!username || isNaN(amount) || amount <= 0) {
+        showToast("Please enter a valid username and positive amount.");
+        return;
+      }
+      try {
+        const res = await fetch("/admin/add-balance", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem("adminToken")
+          },
+          body: JSON.stringify({ username, amount })
+        });
+        if (res.ok) {
+          showToast("Balance added successfully!");
+          document.getElementById("lastAction").innerHTML =
+            `<span style="color:green;">Added $${amount.toFixed(2)} to <b>${username}</b></span> at ${new Date().toLocaleString()}`;
+          document.getElementById("addBalanceForm").reset();
+          document.getElementById("balanceDisplay").textContent = "";
+          fetchAllUsers();
+        } else {
+          const data = await res.json();
+          showToast("Error: " + (data.message || "Failed to add balance."));
+        }
+      } catch (err) {
+        showToast("Network error. Try again.");
+      }
+    };
+
+    // Hide autocomplete on click outside
+    document.addEventListener('click', function(event) {
+      if (!event.target.closest('#autocomplete') && event.target.id !== 'username') {
+        document.getElementById('autocomplete').style.display = 'none';
+      }
+    });
+
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.className = "toast show";
+      setTimeout(() => { toast.className = "toast"; }, 3000);
+    }
+  </script>
+<script>
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "setDarkMode") {
+    if (event.data.enable) {
+      document.body.classList.add("dark");
+      document.documentElement.classList.add("dark");
+    } else {
+      document.body.classList.remove("dark");
+      document.documentElement.classList.remove("dark");
+    }
+  }
+});
+// On load, also check localStorage (for direct navigation)
+if (localStorage.getItem("adminDarkMode") === "true") {
+  document.body.classList.add("dark");
+  document.documentElement.classList.add("dark");
+}
+</script>
+</body>
+</html>

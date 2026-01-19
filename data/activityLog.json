@@ -1,0 +1,68 @@
+[
+  {
+    "_id": "6839006adab7eb0bedfa2a2a",
+    "username": "Josh",
+    "action": "Added balance: $10 by Admin",
+    "date": "2025-05-10T11:18:03.872Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a2b",
+    "username": "Katee",
+    "action": "Added balance: $20",
+    "date": "2025-05-09T20:53:28.420Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a2c",
+    "username": "Essie",
+    "action": "Added balance: $5000",
+    "date": "2025-05-09T20:48:33.765Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a2d",
+    "username": "Josh",
+    "action": "Added balance: $100",
+    "date": "2025-05-09T20:47:57.645Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a2e",
+    "username": "Kate",
+    "action": "Added balance: $1000 by Admin",
+    "date": "2025-05-10T13:14:44.750Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a2f",
+    "username": "Essie",
+    "action": "Added balance: $10 by Admin",
+    "date": "2025-05-10T13:45:13.580Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a30",
+    "username": "Katee",
+    "action": "Added balance: $80 by Admin",
+    "date": "2025-05-10T14:19:34.908Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a31",
+    "username": "Essie",
+    "action": "Added balance: $500",
+    "date": "2025-05-10T11:11:26.515Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a32",
+    "username": "Essie",
+    "action": "Added balance: $300 by Admin",
+    "date": "2025-05-10T11:19:07.761Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a33",
+    "username": "Essie",
+    "action": "Added balance: $200 by Admin",
+    "date": "2025-05-10T13:00:57.853Z"
+  },
+  {
+    "_id": "6839006adab7eb0bedfa2a34",
+    "username": "Essie",
+    "action": "Added balance: $1000 by Admin",
+    "date": "2025-05-10T11:50:41.870Z"
+  }
+]

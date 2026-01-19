@@ -1,0 +1,15 @@
+[
+  {
+    "_id": "685760631d497cb619441bb4",
+    "target": "https://google.com",
+    "location": {
+      "lat": 1,
+      "lon": 2
+    },
+    "clickId": "test123",
+    "userAgent": "curl",
+    "time": "now",
+    "createdAt": "2025-06-22T01:46:11.418Z",
+    "__v": 0
+  }
+]

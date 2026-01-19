@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin - Transactions Management</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <script>
+    // Redirect to login if token missing
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      alert("Access denied. Please login.");
+      window.location.href = "/admin-panel/login.html";
+    }
+  </script>
+
+  <div class="main-content" id="mainContent">
+    <main class="dashboard-container">
+      <section class="admin-section">
+        <div class="section-header">
+          <h2>Transactions Management</h2>
+          <input type="text" id="searchInput" placeholder="Search by username, type, or status..." oninput="searchTransactions()" />
+          <button class="export-btn" onclick="exportTransactionsCSV()"><i class="fa fa-download"></i> Export CSV</button>
+        </div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="selectAllTransactions" onclick="toggleSelectAllTransactions(this)"></th>
+                <th>Transaction ID</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTable">
+              <!-- Transaction rows injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div class="bulk-actions" id="bulkActions" style="display:none;">
+          <button class="bulk-btn" onclick="bulkDeleteTransactions()"><i class="fa fa-trash"></i> Delete Selected</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- View/Edit Transaction Modal -->
+  <div class="modal" id="transactionModal">
+    <div class="modal-content">
+      <span class="close" onclick="closeTransactionModal()">&times;</span>
+      <h2 id="transactionModalTitle">View/Edit Transaction</h2>
+      <form id="transactionForm">
+        <input type="text" id="modalUser" placeholder="User" required readonly />
+        <input type="text" id="modalType" placeholder="Type" required />
+        <input type="number" id="modalAmount" placeholder="Amount" step="0.01" required />
+        <select id="modalStatus" required>
+          <option value="Pending">Pending</option>
+          <option value="Completed">Completed</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+        <input type="text" id="modalDate" placeholder="Date" readonly />
+        <button type="submit" class="add-btn">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // --- TRANSACTIONS MANAGEMENT WITH RESTful API ---
+    let selectedTransactions = new Set();
+    let editingTransactionIndex = null;
+    let allTransactions = [];
+
+    // Fetch all transactions from API
+    async function fetchTransactions() {
+      try {
+        const res = await fetch('/admin/transactions', {
+          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
+        });
+        if (!res.ok) throw new Error('Unauthorized');
+        const data = await res.json();
+
+        // If API returned flat array (legacy), treat as deposits (no withdrawals)
+        let deposits = [];
+        let withdrawals = [];
+        if (Array.isArray(data)) {
+          deposits = data;
+        } else {
+          deposits = Array.isArray(data.deposits) ? data.deposits : [];
+          withdrawals = Array.isArray(data.withdrawals) ? data.withdrawals : [];
+        }
+
+        // Merge deposits and withdrawals, and label them
+        let merged = [];
+        merged = merged.concat(deposits.map(item => ({
+          ...item,
+          id: item.id || item._id || item.transactionId || "",
+          type: item.type && item.type.toLowerCase().includes("withdrawal") ? "Withdrawal" : "Deposit",
+          user: item.username || item.user || "",
+          status: item.status || "Completed",
+          createdAt: item.createdAt || item.date || "",
+        })));
+        merged = merged.concat(withdrawals.map(item => ({
+          ...item,
+          id: item.id || item._id || item.transactionId || "",
+          type: "Withdrawal",
+          user: item.username || item.user || "",
+          status: (item.status && (item.status.toLowerCase() === "pending" || item.status.toLowerCase() === "reviewing")) ? "Pending" :
+                 (item.status && (item.status.toLowerCase() === "completed" || item.status.toLowerCase() === "success" || item.status.toLowerCase() === "approved")) ? "Completed" :
+                 (item.status && (item.status.toLowerCase() === "rejected" || item.status.toLowerCase() === "failed")) ? "Rejected" :
+                 "Pending",
+          createdAt: item.createdAt || item.date || "",
+        })));
+
+        // Sort by most recent
+        merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        allTransactions = merged;
+        renderTransactions(allTransactions);
+      } catch (err) {
+        alert("Session expired or unauthorized. Please login again.");
+        logout();
+      }
+    }
+
+    // Render transactions in table
+    function renderTransactions(transactions) {
+      const table = document.getElementById("transactionsTable");
+      table.innerHTML = "";
+      transactions.forEach((txn, idx) => {
+        const checked = selectedTransactions.has(idx) ? "checked" : "";
+        const dateStr = txn.createdAt
+          ? new Date(txn.createdAt).toLocaleString()
+          : (txn.date ? new Date(txn.date).toLocaleString() : "");
+        table.innerHTML += `
+          <tr>
+            <td><input type="checkbox" onclick="selectTransaction(${idx}, this)" ${checked}></td>
+            <td>${txn.id || ""}</td>
+            <td>${txn.user || ""}</td>
+            <td>${txn.type || ""}</td>
+            <td>$${txn.amount !== undefined ? Number(txn.amount).toFixed(2) : "0.00"}</td>
+            <td>
+              <span class="status-badge ${
+                txn.status === 'Completed' ? 'status-active'
+                : txn.status === 'Rejected' ? 'status-suspended'
+                : txn.status === 'Pending' ? 'status-danger'
+                : 'status-pending'
+              }">
+                ${txn.status || "Pending"}
+              </span>
+            </td>
+            <td>${dateStr}</td>
+            <td class="action-icons">
+              <button class="icon-btn" title="View/Edit" onclick="editTransaction(${idx})"><i class="fa fa-edit"></i></button>
+              <button class="icon-btn" title="Delete" onclick="deleteTransaction(${idx})"><i class="fa fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById("bulkActions").style.display = selectedTransactions.size > 0 ? "block" : "none";
+    }
+
+    // Select/deselect transaction for bulk actions
+    function selectTransaction(idx, checkbox) {
+      if (checkbox.checked) selectedTransactions.add(idx);
+      else selectedTransactions.delete(idx);
+      document.getElementById("bulkActions").style.display = selectedTransactions.size > 0 ? "block" : "none";
+    }
+    function toggleSelectAllTransactions(master) {
+      selectedTransactions = new Set();
+      if (master.checked) {
+        allTransactions.forEach((_, idx) => selectedTransactions.add(idx));
+      }
+      renderTransactions(allTransactions);
+      document.getElementById("selectAllTransactions").checked = master.checked;
+    }
+
+    // Search
+    function searchTransactions() {
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = allTransactions.filter(txn =>
+        (txn.user && txn.user.toLowerCase().includes(query)) ||
+        (txn.type && txn.type.toLowerCase().includes(query)) ||
+        (txn.status && txn.status.toLowerCase().includes(query))
+      );
+      renderTransactions(filtered);
+    }
+
+    // View/Edit Transaction
+    function editTransaction(idx) {
+      editingTransactionIndex = idx;
+      const txn = allTransactions[idx];
+      document.getElementById("transactionModalTitle").textContent = "Edit Transaction";
+      document.getElementById("modalUser").value = txn.user;
+      document.getElementById("modalType").value = txn.type;
+      document.getElementById("modalAmount").value = txn.amount;
+      document.getElementById("modalStatus").value = txn.status || "Pending";
+      document.getElementById("modalDate").value = txn.createdAt 
+        ? new Date(txn.createdAt).toLocaleString()
+        : (txn.date ? new Date(txn.date).toLocaleString() : "");
+      document.getElementById("transactionModal").style.display = "block";
+    }
+
+    function closeTransactionModal() {
+      document.getElementById("transactionModal").style.display = "none";
+    }
+
+    document.getElementById("transactionForm").onsubmit = async function(e) {
+      e.preventDefault();
+      const type = document.getElementById("modalType").value.trim();
+      const amount = parseFloat(document.getElementById("modalAmount").value);
+      const status = document.getElementById("modalStatus").value;
+
+      if (editingTransactionIndex !== null) {
+        const txn = allTransactions[editingTransactionIndex];
+        await fetch(`/admin/transactions/${encodeURIComponent(txn.id)}`, {
+          method: 'PUT',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ type, amount, status })
+        });
+        showToast("Transaction updated!");
+        closeTransactionModal();
+        fetchTransactions();
+      }
+    };
+
+    // Delete transaction
+    async function deleteTransaction(idx) {
+      const txn = allTransactions[idx];
+      if (confirm("Are you sure you want to delete this transaction?")) {
+        await fetch(`/admin/transactions/${encodeURIComponent(txn.id)}`, {
+          method: 'DELETE',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+        showToast("Transaction deleted.");
+        fetchTransactions();
+      }
+    }
+
+    // Bulk delete
+    async function bulkDeleteTransactions() {
+      if (confirm("Are you sure you want to delete selected transactions?")) {
+        for (let idx of selectedTransactions) {
+          const txn = allTransactions[idx];
+          await fetch(`/admin/transactions/${encodeURIComponent(txn.id)}`, {
+            method: 'DELETE',
+            headers: { "x-admin-token": localStorage.getItem('adminToken') }
+          });
+        }
+        selectedTransactions.clear();
+        showToast("Selected transactions deleted.");
+        fetchTransactions();
+      }
+    }
+
+    // Export transactions to CSV
+    function exportTransactionsCSV() {
+      const csv = [
+        ["ID", "User", "Type", "Amount", "Status", "Date"],
+        ...allTransactions.map(t => [
+          t.id, t.user, t.type, t.amount, t.status,
+          t.createdAt ? new Date(t.createdAt).toLocaleString() : (t.date ? new Date(t.date).toLocaleString() : "")
+        ])
+      ].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transactions.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Exported to CSV!");
+    }
+
+    // Toast and logout helpers
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.className = "toast show";
+      setTimeout(() => { toast.className = "toast"; }, 3000);
+    }
+    function logout() {
+      localStorage.removeItem("adminToken");
+      window.location.href = "/admin-panel/login.html";
+    }
+
+    // Modal close on outside click
+    window.onclick = function(event) {
+      if (event.target.classList.contains('modal')) {
+        event.target.style.display = "none";
+      }
+    }
+
+    // Initial load
+    fetchTransactions();
+  </script>
+<script>
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "setDarkMode") {
+    if (event.data.enable) {
+      document.body.classList.add("dark");
+      document.documentElement.classList.add("dark");
+    } else {
+      document.body.classList.remove("dark");
+      document.documentElement.classList.remove("dark");
+    }
+  }
+});
+// On load, also check localStorage (for direct navigation)
+if (localStorage.getItem("adminDarkMode") === "true") {
+  document.body.classList.add("dark");
+  document.documentElement.classList.add("dark");
+}
+</script>
+</body>
+</html>

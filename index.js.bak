@@ -1,0 +1,220 @@
+#!/usr/bin/env node
+// index.js
+// SQLite-backed mongoose shim that preserves existing routes (admin.js, api.js, etc.)
+// UPDATED: safe for start-task (findById().lean(), $inc support, no real Mongo connection)
+
+const path = require('path');
+const fs = require('fs');
+
+const mongoose = require('mongoose');
+
+// --------------------------------------------------
+// Disable real Mongo connection (KEEP mongoose API)
+// --------------------------------------------------
+mongoose.connect = async () => {
+  console.log('ℹ️ mongoose.connect skipped (SQLite shim active)');
+  return mongoose;
+};
+
+const express = require('express');
+const cors = require('cors');
+const pathModule = require('path');
+require('dotenv').config();
+
+const { EJSON } = require('bson');
+const Database = require('better-sqlite3');
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
+// Health endpoint
+try {
+  app.get('/health', require('./src/health'));
+} catch (e) {
+  app.get('/health', (req, res) => res.json({ ok: true }));
+}
+
+// Static files
+app.use('/assets', express.static(pathModule.join(__dirname, 'public', 'assets')));
+app.use('/favicon.ico', express.static(pathModule.join(__dirname, 'public', 'favicon.ico')));
+app.use('/admin-panel', express.static(pathModule.join(__dirname, 'public', 'admin-panel')));
+app.use('/', express.static(pathModule.join(__dirname, 'public')));
+
+// --------------------------------------------------
+// SQLite setup
+// --------------------------------------------------
+const SQLITE_FILE = process.env.SQLITE_FILE || pathModule.join(__dirname, 'data.sqlite');
+let sqlite = null;
+try {
+  sqlite = new Database(SQLITE_FILE);
+  try { sqlite.pragma('journal_mode = WAL'); } catch {}
+  console.log('✅ SQLite opened:', SQLITE_FILE);
+} catch (err) {
+  console.error('❌ Failed to open SQLite:', err);
+}
+
+// --------------------------------------------------
+// EJSON helpers
+// --------------------------------------------------
+function parseStoredDoc(docStr) {
+  if (!docStr) return null;
+  try { return EJSON.parse(docStr); } catch {
+    try { return JSON.parse(docStr); } catch { return docStr; }
+  }
+}
+function stringifyDoc(doc) {
+  try { return EJSON.stringify(doc); } catch { return JSON.stringify(doc); }
+}
+
+// --------------------------------------------------
+// ObjectId compatibility
+// --------------------------------------------------
+if (mongoose?.Types?.ObjectId) {
+  const orig = mongoose.Types.ObjectId.isValid.bind(mongoose.Types.ObjectId);
+  mongoose.Types.ObjectId.isValid = v => typeof v === 'string' ? true : orig(v);
+}
+
+// --------------------------------------------------
+// Filter matcher (basic Mongo-like)
+// --------------------------------------------------
+function docMatchesFilter(doc, filter) {
+  if (!filter || !Object.keys(filter).length) return true;
+  for (const [k, v] of Object.entries(filter)) {
+    if (k === '$or') return v.some(f => docMatchesFilter(doc, f));
+    if (k === '$and') return v.every(f => docMatchesFilter(doc, f));
+    const dv = doc?.[k];
+    if (v?.$in) { if (!v.$in.map(String).includes(String(dv))) return false; continue; }
+    if (v?.$ne) { if (String(dv) === String(v.$ne)) return false; continue; }
+    if (v?.$exists !== undefined) {
+      if ((dv !== undefined) !== Boolean(v.$exists)) return false;
+      continue;
+    }
+    if (String(dv) !== String(v)) return false;
+  }
+  return true;
+}
+
+// --------------------------------------------------
+// SQLite helpers
+// --------------------------------------------------
+function ensureTable(name) {
+  const row = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+  if (!row) sqlite.prepare(`CREATE TABLE IF NOT EXISTS "${name}" (_id TEXT PRIMARY KEY, doc TEXT)`).run();
+}
+function tableNameForModel(model) {
+  if (model?.collection?.name) return model.collection.name;
+  if (model?.modelName) return model.modelName.toLowerCase() + 's';
+  return null;
+}
+
+// --------------------------------------------------
+// SQLiteQuery (supports lean, sort, limit, skip)
+// --------------------------------------------------
+class SQLiteQuery {
+  constructor(model, { filter = {}, single = false } = {}) {
+    this.model = model; this.filter = filter; this.single = single;
+    this._lean = false; this._limit = null; this._skip = 0;
+  }
+  lean() { this._lean = true; return this; }
+  limit(n) { this._limit = Number(n); return this; }
+  skip(n) { this._skip = Number(n); return this; }
+  async exec() {
+    const table = tableNameForModel(this.model);
+    if (!table) return this.single ? null : [];
+    ensureTable(table);
+    let docs = sqlite.prepare(`SELECT _id, doc FROM "${table}"`).all()
+      .map(r => ({ ...parseStoredDoc(r.doc), _id: r._id }))
+      .filter(d => docMatchesFilter(d, this.filter));
+    if (this._skip) docs = docs.slice(this._skip);
+    if (this._limit !== null) docs = docs.slice(0, this._limit);
+    if (this.single) {
+      const d = docs[0] || null;
+      return this._lean || !d ? d : this.model.hydrate(d);
+    }
+    return this._lean ? docs : docs.map(d => this.model.hydrate(d));
+  }
+  then(r, j) { return this.exec().then(r, j); }
+}
+
+// --------------------------------------------------
+// Attach shim to mongoose.Model
+// --------------------------------------------------
+if (sqlite) {
+  const Model = mongoose.Model;
+
+  Model.find = function (f = {}) { return new SQLiteQuery(this, { filter: f }); };
+  Model.findOne = function (f = {}) { return new SQLiteQuery(this, { filter: f, single: true }); };
+  Model.findById = function (id) { return new SQLiteQuery(this, { filter: { _id: String(id) }, single: true }); };
+
+  Model.create = function (doc) {
+    const table = tableNameForModel(this); ensureTable(table);
+    const rec = { ...doc, _id: doc._id || String(Date.now()) };
+    sqlite.prepare(`INSERT OR REPLACE INTO "${table}" VALUES (?,?)`).run(rec._id, stringifyDoc(rec));
+    return Promise.resolve(this.hydrate(rec));
+  };
+
+  function applyUpdate(doc, update) {
+    const d = { ...doc };
+    if (update.$set) Object.assign(d, update.$set);
+    if (update.$inc) for (const k in update.$inc) d[k] = Number(d[k] || 0) + Number(update.$inc[k]);
+    return d;
+  }
+
+  Model.updateOne = function (f, u) {
+    const table = tableNameForModel(this); ensureTable(table);
+    const rows = sqlite.prepare(`SELECT _id, doc FROM "${table}"`).all();
+    for (const r of rows) {
+      const d = parseStoredDoc(r.doc);
+      if (!docMatchesFilter(d, f)) continue;
+      const nd = applyUpdate(d, u);
+      sqlite.prepare(`INSERT OR REPLACE INTO "${table}" VALUES (?,?)`).run(r._id, stringifyDoc(nd));
+      return Promise.resolve({ modifiedCount: 1 });
+    }
+    return Promise.resolve({ modifiedCount: 0 });
+  };
+
+  Model.findOneAndUpdate = function (f, u) {
+    return {
+      leanFlag: false,
+      lean() { this.leanFlag = true; return this; },
+      exec: async () => {
+        const table = tableNameForModel(this); ensureTable(table);
+        const rows = sqlite.prepare(`SELECT _id, doc FROM "${table}"`).all();
+        for (const r of rows) {
+          const d = parseStoredDoc(r.doc);
+          if (!docMatchesFilter(d, f)) continue;
+          const nd = applyUpdate(d, u);
+          sqlite.prepare(`INSERT OR REPLACE INTO "${table}" VALUES (?,?)`).run(r._id, stringifyDoc(nd));
+          return this.leanFlag ? nd : this.hydrate(nd);
+        }
+        return null;
+      },
+      then(r, j) { return this.exec().then(r, j); }
+    };
+  };
+}
+
+// --------------------------------------------------
+// Routes (UNCHANGED)
+// --------------------------------------------------
+app.use('/api', require('./routes/api'));
+app.use('/admin', require('./routes/admin'));
+app.use(require('./routes/process-commission'));
+app.use('/api', require('./routes/upload'));
+
+// --------------------------------------------------
+// Errors
+// --------------------------------------------------
+app.use((req, res) => res.status(404).json({ success: false }));
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ success: false, message: err.message });
+});
+
+// --------------------------------------------------
+// Start
+// --------------------------------------------------
+const PORT = process.env.PORT || 3002;
+app.listen(PORT, () => console.log(`✅ Backend running on http://localhost:${PORT}`));

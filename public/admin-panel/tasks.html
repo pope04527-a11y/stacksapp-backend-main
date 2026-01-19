@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin - Tasks Management</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <script>
+    // Redirect to login if token missing
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      alert("Access denied. Please login.");
+      window.location.href = "/admin-panel/login.html";
+    }
+  </script>
+
+  <div class="main-content" id="mainContent">
+    <main class="dashboard-container">
+      <section class="admin-section">
+        <div class="section-header">
+          <h2>Tasks Management</h2>
+          <input type="text" id="searchInput" placeholder="Search by task name, user, or status..." oninput="searchTasks()" />
+          <button class="add-btn" onclick="showAddTaskModal()"><i class="fa fa-plus"></i> Add Task</button>
+          <button class="export-btn" onclick="exportTasksCSV()"><i class="fa fa-download"></i> Export CSV</button>
+        </div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="selectAllTasks" onclick="toggleSelectAllTasks(this)"></th>
+                <th>Task ID</th>
+                <th>User</th>
+                <th>Task Name</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tasksTable">
+              <!-- Task rows injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div class="bulk-actions" id="bulkActions" style="display:none;">
+          <button class="bulk-btn" onclick="bulkCompleteTasks()"><i class="fa fa-check"></i> Mark Complete</button>
+          <button class="bulk-btn" onclick="bulkDeleteTasks()"><i class="fa fa-trash"></i> Delete Selected</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Add/Edit Task Modal -->
+  <div class="modal" id="taskModal">
+    <div class="modal-content">
+      <span class="close" onclick="closeTaskModal()">&times;</span>
+      <h2 id="taskModalTitle">Add Task</h2>
+      <form id="taskForm">
+        <input type="text" id="modalUser" placeholder="Assigned User" required />
+        <input type="text" id="modalTaskName" placeholder="Task Name" required />
+        <select id="modalStatus" required>
+          <option value="Pending">Pending</option>
+          <option value="Completed">Completed</option>
+        </select>
+        <button type="submit" class="add-btn">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // --- TASKS MANAGEMENT WITH RESTful API ---
+    let selectedTasks = new Set();
+    let editingTaskIndex = null;
+    let allTasks = [];
+
+    // Fetch all tasks from API
+    async function fetchTasks() {
+      try {
+        const res = await fetch('/admin/tasks', {
+          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
+        });
+        if (!res.ok) throw new Error('Unauthorized');
+        allTasks = await res.json();
+        renderTasks(allTasks);
+      } catch (err) {
+        alert("Session expired or unauthorized. Please login again.");
+        logout();
+      }
+    }
+
+    // Render tasks in table: show only Task ID, User, Task Name, Status, Created At (matching your sample JSON)
+    function renderTasks(tasks) {
+      const table = document.getElementById("tasksTable");
+      table.innerHTML = "";
+      tasks.forEach((task, idx) => {
+        const checked = selectedTasks.has(idx) ? "checked" : "";
+        const taskId = task.taskCode || task.id || ""; // Use taskCode as Task ID
+        const user = task.username || task.user || "";
+        const name = (task.product && task.product.name) ? task.product.name : "";
+        const status = task.status || "Pending";
+        // Use completedAt (main date of task), fall back to startedAt
+        const createdAt = task.completedAt
+          ? new Date(task.completedAt).toLocaleString()
+          : (task.startedAt ? new Date(task.startedAt).toLocaleString() : "");
+        table.innerHTML += `
+          <tr>
+            <td><input type="checkbox" onclick="selectTask(${idx}, this)" ${checked}></td>
+            <td>${taskId}</td>
+            <td>${user}</td>
+            <td>${name}</td>
+            <td>
+              <span class="status-badge ${status === 'Completed' ? 'status-active' : (status === 'Pending' ? 'status-danger' : 'status-suspended')}">
+                ${status}
+              </span>
+            </td>
+            <td>${createdAt}</td>
+            <td class="action-icons">
+              <button class="icon-btn" title="Edit" onclick="editTask(${idx})"><i class="fa fa-edit"></i></button>
+              <button class="icon-btn" title="Mark Complete" onclick="completeTask(${idx})"><i class="fa fa-check"></i></button>
+              <button class="icon-btn" title="Delete" onclick="deleteTask(${idx})"><i class="fa fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById("bulkActions").style.display = selectedTasks.size > 0 ? "block" : "none";
+    }
+
+    // Select/deselect task for bulk actions
+    function selectTask(idx, checkbox) {
+      if (checkbox.checked) selectedTasks.add(idx);
+      else selectedTasks.delete(idx);
+      document.getElementById("bulkActions").style.display = selectedTasks.size > 0 ? "block" : "none";
+    }
+    function toggleSelectAllTasks(master) {
+      selectedTasks = new Set();
+      if (master.checked) {
+        allTasks.forEach((_, idx) => selectedTasks.add(idx));
+      }
+      renderTasks(allTasks);
+      document.getElementById("selectAllTasks").checked = master.checked;
+    }
+
+    // Search (on username, product.name, or status)
+    function searchTasks() {
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = allTasks.filter(task =>
+        ((task.username || task.user || "").toLowerCase().includes(query)) ||
+        ((task.product && task.product.name ? task.product.name : "").toLowerCase().includes(query)) ||
+        ((task.status || "").toLowerCase().includes(query))
+      );
+      renderTasks(filtered);
+    }
+
+    // Add/Edit Task
+    function showAddTaskModal() {
+      editingTaskIndex = null;
+      document.getElementById("taskModalTitle").textContent = "Add Task";
+      document.getElementById("taskForm").reset();
+      document.getElementById("taskModal").style.display = "block";
+    }
+    function closeTaskModal() {
+      document.getElementById("taskModal").style.display = "none";
+    }
+
+    document.getElementById("taskForm").onsubmit = async function(e) {
+      e.preventDefault();
+      const user = document.getElementById("modalUser").value.trim();
+      const name = document.getElementById("modalTaskName").value.trim();
+      const status = document.getElementById("modalStatus").value;
+
+      if (editingTaskIndex !== null) {
+        // Edit
+        const task = allTasks[editingTaskIndex];
+        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
+          method: 'PUT',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ user, name, status })
+        });
+        showToast("Task updated!");
+      } else {
+        // Add
+        await fetch('/admin/tasks', {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ user, name, status })
+        });
+        showToast("Task added!");
+      }
+      closeTaskModal();
+      fetchTasks();
+    };
+
+    function editTask(idx) {
+      editingTaskIndex = idx;
+      const task = allTasks[idx];
+      document.getElementById("taskModalTitle").textContent = "Edit Task";
+      document.getElementById("modalUser").value = task.username || task.user || "";
+      document.getElementById("modalTaskName").value = (task.product && task.product.name) ? task.product.name : "";
+      document.getElementById("modalStatus").value = task.status || "Pending";
+      document.getElementById("taskModal").style.display = "block";
+    }
+
+    // Mark complete
+    async function completeTask(idx) {
+      const task = allTasks[idx];
+      await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
+        method: 'PATCH',
+        headers: { "x-admin-token": localStorage.getItem('adminToken') }
+      });
+      showToast("Task marked as completed.");
+      fetchTasks();
+    }
+
+    // Delete task
+    async function deleteTask(idx) {
+      const task = allTasks[idx];
+      if (confirm("Are you sure you want to delete this task?")) {
+        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
+          method: 'DELETE',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+        showToast("Task deleted.");
+        fetchTasks();
+      }
+    }
+
+    // Bulk actions
+    async function bulkCompleteTasks() {
+      for (let idx of selectedTasks) {
+        const task = allTasks[idx];
+        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
+          method: 'PATCH',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+      }
+      showToast("Selected tasks marked as completed.");
+      fetchTasks();
+      selectedTasks.clear();
+    }
+    async function bulkDeleteTasks() {
+      if (confirm("Are you sure you want to delete selected tasks?")) {
+        for (let idx of selectedTasks) {
+          const task = allTasks[idx];
+          await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
+            method: 'DELETE',
+            headers: { "x-admin-token": localStorage.getItem('adminToken') }
+          });
+        }
+        selectedTasks.clear();
+        showToast("Selected tasks deleted.");
+        fetchTasks();
+      }
+    }
+
+    // Export tasks to CSV
+    function exportTasksCSV() {
+      const csv = [
+        ["Task ID", "User", "Task Name", "Status", "Created At"],
+        ...allTasks.map(t => [
+          t.taskCode || t.id || "",
+          t.username || t.user || "",
+          t.product && t.product.name ? t.product.name : "",
+          t.status || "",
+          t.completedAt ? new Date(t.completedAt).toLocaleString() : (t.startedAt ? new Date(t.startedAt).toLocaleString() : "")
+        ])
+      ].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tasks.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Exported to CSV!");
+    }
+
+    // Toast and logout helpers
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.className = "toast show";
+      setTimeout(() => { toast.className = "toast"; }, 3000);
+    }
+    function logout() {
+      localStorage.removeItem("adminToken");
+      window.location.href = "/admin-panel/login.html";
+    }
+
+    // Modal close on outside click
+    window.onclick = function(event) {
+      if (event.target.classList.contains('modal')) {
+        event.target.style.display = "none";
+      }
+    }
+
+    // Initial load
+    fetchTasks();
+  </script>
+<script>
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "setDarkMode") {
+    if (event.data.enable) {
+      document.body.classList.add("dark");
+      document.documentElement.classList.add("dark");
+    } else {
+      document.body.classList.remove("dark");
+      document.documentElement.classList.remove("dark");
+    }
+  }
+});
+// On load, also check localStorage (for direct navigation)
+if (localStorage.getItem("adminDarkMode") === "true") {
+  document.body.classList.add("dark");
+  document.documentElement.classList.add("dark");
+}
+</script>
+</body>
+</html>

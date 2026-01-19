@@ -1,0 +1,64 @@
+[
+  {
+    "_id": "683901f64345a9115fad4ec3",
+    "id": "3e41884ab42c0909a4e06379",
+    "username": "Josh",
+    "amount": 100,
+    "createdAt": "2025-05-29T01:33:47.514Z",
+    "status": "Approved"
+  },
+  {
+    "_id": "683901f64345a9115fad4ec4",
+    "id": "abf01c50fa2a6888280e4d94",
+    "username": "Kate",
+    "amount": 50,
+    "createdAt": "2025-05-25T19:30:27.303Z",
+    "status": "Approved"
+  },
+  {
+    "_id": "683901f64345a9115fad4ec5",
+    "id": "60e9f16a999b020f74d31bc9",
+    "username": "Kate",
+    "amount": 100,
+    "createdAt": "2025-05-25T19:20:06.990Z",
+    "status": "Approved"
+  },
+  {
+    "_id": "683901f64345a9115fad4ec6",
+    "username": "Kate",
+    "amount": 51,
+    "createdAt": "2025-05-22T16:46:55.208Z",
+    "status": "Completed"
+  },
+  {
+    "_id": "683901f64345a9115fad4ec7",
+    "username": "Kate",
+    "amount": 54,
+    "createdAt": "2025-05-25T19:09:54.538Z",
+    "status": "Completed"
+  },
+  {
+    "_id": "68719098ec2288d86f18845d",
+    "username": "Mum",
+    "amount": 100,
+    "createdAt": "2025-07-11T22:30:48.732Z",
+    "status": "Pending",
+    "__v": 0
+  },
+  {
+    "_id": "69403dca89818e2377c0067f",
+    "username": "MK001",
+    "amount": 500,
+    "createdAt": "2025-12-15T16:56:42.803Z",
+    "status": "Pending",
+    "__v": 0
+  },
+  {
+    "_id": "6940401c89818e2377c00770",
+    "username": "MK001",
+    "amount": 80,
+    "createdAt": "2025-12-15T17:06:36.471Z",
+    "status": "Pending",
+    "__v": 0
+  }
+]
