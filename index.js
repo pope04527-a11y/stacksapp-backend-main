@@ -33,11 +33,12 @@ try {
   app.get('/health', (req, res) => res.json({ ok: true }));
 }
 
-// Serve static files
-app.use("/assets", express.static(pathModule.join(__dirname, "public", "assets")));
-app.use("/favicon.ico", express.static(pathModule.join(__dirname, "public", "favicon.ico")));
-app.use("/admin-panel", express.static(pathModule.join(__dirname, "public", "admin-panel")));
-app.use("/", express.static(pathModule.join(__dirname, "public")));
+// -----------------------------
+// NOTE: Serve production frontend from dist (Vite default)
+// -----------------------------
+const clientDir = pathModule.join(__dirname, 'dist');
+// Serve static files from dist (index.html + assets)
+app.use(express.static(clientDir));
 
 // -----------------------------
 // EJSON parse/stringify helpers
@@ -143,7 +144,21 @@ try {
   // optional
 }
 
-// 404 + error handler
+// -----------------------------
+// SPA fallback for client-side routes (serve dist/index.html)
+// -----------------------------
+// IMPORTANT: This must come AFTER your API routes so API calls are not hijacked.
+app.get('*', (req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const accept = req.headers.accept || '';
+  if (!accept.includes('text/html')) return next();
+  const indexPath = pathModule.join(clientDir, 'index.html');
+  res.sendFile(indexPath, err => {
+    if (err) next(err);
+  });
+});
+
+// 404 + error handler (for non-HTML/API requests)
 app.use((req, res) => res.status(404).json({ success: false, message: 'Resource not found' }));
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err && err.stack ? err.stack : err);
