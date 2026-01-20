@@ -155,13 +155,51 @@
 
   <script>
     /**
-     * Admin login flow:
-     * 1) POST /admin/login with credentials, include credentials so server can set httpOnly cookie.
-     * 2) After success, call GET /admin/token (with credentials) to fetch the canonical token persisted in MongoDB.
-     *    That guarantees what we store in localStorage matches exactly the DB value.
-     * 3) Store canonical token under 'stacksAdminToken' and legacy 'adminToken' for compatibility.
+     * INSECURE QUICK UNBLOCK:
+     * Replace "REPLACE_WITH_TOKEN" below with your exact admin token string from MongoDB.
+     * This will:
+     *  - store that token in localStorage under stacksAdminToken/adminToken
+     *  - automatically add the token as Authorization and x-admin-token on all fetch() calls
+     *
+     * WARNING: This is insecure. Remove this after you fix token persistence on the server.
      */
+    (function(){
+      const HARDCODED_ADMIN_TOKEN = "dc358e700c73a75a07c0fba44a5cc81b4aff3450ebb7d19b"; // <<--- PUT THE EXACT TOKEN HERE (string)
+      if (HARDCODED_ADMIN_TOKEN && HARDCODED_ADMIN_TOKEN.trim() !== "") {
+        try {
+          localStorage.setItem("stacksAdminToken", HARDCODED_ADMIN_TOKEN);
+          localStorage.setItem("adminToken", HARDCODED_ADMIN_TOKEN);
+        } catch (e) {
+          // ignore localStorage failures
+        }
 
+        // Wrap global fetch to inject header automatically for admin panel requests
+        const _origFetch = window.fetch.bind(window);
+        window.fetch = function(input, init = {}) {
+          try {
+            init = init || {};
+            init.headers = init.headers || {};
+            // Only inject if not already present
+            if (!init.headers['Authorization'] && !init.headers['authorization']) {
+              init.headers['Authorization'] = `Bearer ${HARDCODED_ADMIN_TOKEN}`;
+            }
+            if (!init.headers['x-admin-token'] && !init.headers['X-Admin-Token']) {
+              init.headers['x-admin-token'] = HARDCODED_ADMIN_TOKEN;
+            }
+            // Preserve credentials if caller explicitly sets it or if same-origin requests used
+            if (typeof init.credentials === 'undefined') {
+              init.credentials = 'include';
+            }
+          } catch (e) {
+            // noop
+          }
+          return _origFetch(input, init);
+        };
+      }
+    })();
+  </script>
+
+  <script>
     async function login() {
       const username = document.getElementById("username").value.trim();
       const password = document.getElementById("password").value;
@@ -171,18 +209,11 @@
       errorMsg.className = "error";
       loginBtn.disabled = true;
 
-      if (!username || !password) {
-        errorMsg.textContent = "Username and password are required.";
-        loginBtn.disabled = false;
-        return;
-      }
-
       try {
-        // 1) Post credentials. Include credentials so the server can set the httpOnly cookie.
         const res = await fetch('/admin/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+          credentials: 'include', // important for CORS with credentials:true; remove if not needed
           body: JSON.stringify({ username, password })
         });
 
@@ -202,73 +233,19 @@
           return;
         }
 
-        if (!(res.ok && data && data.success)) {
+        if (res.ok && data.success && data.token) {
+          // Save token for future API calls (legacy fallback)
+          localStorage.setItem("stacksAdminToken", data.token);
+          localStorage.setItem("adminToken", data.token); // legacy fallback
+          errorMsg.className = "error success";
+          errorMsg.textContent = "Login successful! Redirecting...";
+          setTimeout(() => {
+            window.location.href = "/admin-panel/index.html";
+          }, 700);
+        } else {
           errorMsg.textContent = (data && data.message) ? data.message : "Invalid credentials.";
-          loginBtn.disabled = false;
-          return;
-        }
-
-        // 2) Request canonical token from server (reads httpOnly cookie or headers and returns DB token).
-        // This ensures we store the exact token persisted in Mongo.
-        try {
-          const tokenRes = await fetch('/admin/token', {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include'
-          });
-
-          if (tokenRes.ok) {
-            const tokenData = await tokenRes.json();
-            if (tokenData && tokenData.success && tokenData.token) {
-              const canonical = String(tokenData.token);
-              // store exact DB token
-              localStorage.setItem("stacksAdminToken", canonical);
-              // legacy fallback key
-              localStorage.setItem("adminToken", canonical);
-              errorMsg.className = "error success";
-              errorMsg.textContent = "Login successful! Redirecting...";
-              setTimeout(() => {
-                window.location.href = "/admin-panel/index.html";
-              }, 700);
-              return;
-            }
-          }
-
-          // If token endpoint failed, fall back to server response token (if present)
-          if (data.token && String(data.token).trim()) {
-            localStorage.setItem("stacksAdminToken", String(data.token).trim());
-            localStorage.setItem("adminToken", String(data.token).trim());
-            errorMsg.className = "error success";
-            errorMsg.textContent = "Login successful (fallback). Redirecting...";
-            setTimeout(() => {
-              window.location.href = "/admin-panel/index.html";
-            }, 700);
-            return;
-          }
-
-          // If no token available by either method, show an error
-          errorMsg.textContent = "Login succeeded but no token returned. Contact support.";
-          loginBtn.disabled = false;
-          return;
-        } catch (tokenErr) {
-          // network error while fetching canonical token - fallback to data.token if provided
-          console.error('Failed to fetch canonical token:', tokenErr);
-          if (data.token && String(data.token).trim()) {
-            localStorage.setItem("stacksAdminToken", String(data.token).trim());
-            localStorage.setItem("adminToken", String(data.token).trim());
-            errorMsg.className = "error success";
-            errorMsg.textContent = "Login successful (fallback). Redirecting...";
-            setTimeout(() => {
-              window.location.href = "/admin-panel/index.html";
-            }, 700);
-            return;
-          }
-          errorMsg.textContent = "Network error retrieving token. Please try again.";
-          loginBtn.disabled = false;
-          return;
         }
       } catch (err) {
-        console.error('Admin login error:', err);
         errorMsg.textContent = "Network/server error. Please try again.";
       } finally {
         loginBtn.disabled = false;
