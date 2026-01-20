@@ -154,50 +154,60 @@
   </div>
 
   <script>
-    /**
-     * INSECURE QUICK UNBLOCK:
-     * Replace "REPLACE_WITH_TOKEN" below with your exact admin token string from MongoDB.
-     * This will:
-     *  - store that token in localStorage under stacksAdminToken/adminToken
-     *  - automatically add the token as Authorization and x-admin-token on all fetch() calls
-     *
-     * WARNING: This is insecure. Remove this after you fix token persistence on the server.
-     */
-    (function(){
-      const HARDCODED_ADMIN_TOKEN = "dc358e700c73a75a07c0fba44a5cc81b4aff3450ebb7d19b"; // <<--- PUT THE EXACT TOKEN HERE (string)
-      if (HARDCODED_ADMIN_TOKEN && HARDCODED_ADMIN_TOKEN.trim() !== "") {
-        try {
-          localStorage.setItem("stacksAdminToken", HARDCODED_ADMIN_TOKEN);
-          localStorage.setItem("adminToken", HARDCODED_ADMIN_TOKEN);
-        } catch (e) {
-          // ignore localStorage failures
+  (function(){
+    const HARDCODED_ADMIN_TOKEN = "REPLACE_WITH_TOKEN"; // <<-- keep your hardcoded token
+    if (!HARDCODED_ADMIN_TOKEN || HARDCODED_ADMIN_TOKEN.trim() === "") return;
+
+    try {
+      localStorage.setItem("stacksAdminToken", HARDCODED_ADMIN_TOKEN);
+      localStorage.setItem("adminToken", HARDCODED_ADMIN_TOKEN);
+    } catch (e) {}
+
+    const _origFetch = window.fetch.bind(window);
+
+    window.fetch = function(input, init = {}) {
+      try {
+        // Determine the request URL string for relative/Request inputs
+        let url = "";
+        if (typeof input === "string") url = input;
+        else if (input && input.url) url = input.url;
+
+        // Normalize to lower-case path for simple matching
+        const lower = String(url || "").toLowerCase();
+
+        // Do NOT inject authorization headers for login/token endpoints
+        if (lower.includes("/admin/login") || lower.includes("/admin/token")) {
+          // ensure credentials included for these endpoints
+          init = Object.assign({}, init);
+          if (typeof init.credentials === "undefined") init.credentials = "include";
+          return _origFetch(input, init);
         }
 
-        // Wrap global fetch to inject header automatically for admin panel requests
-        const _origFetch = window.fetch.bind(window);
-        window.fetch = function(input, init = {}) {
-          try {
-            init = init || {};
-            init.headers = init.headers || {};
-            // Only inject if not already present
-            if (!init.headers['Authorization'] && !init.headers['authorization']) {
-              init.headers['Authorization'] = `Bearer ${HARDCODED_ADMIN_TOKEN}`;
-            }
-            if (!init.headers['x-admin-token'] && !init.headers['X-Admin-Token']) {
-              init.headers['x-admin-token'] = HARDCODED_ADMIN_TOKEN;
-            }
-            // Preserve credentials if caller explicitly sets it or if same-origin requests used
-            if (typeof init.credentials === 'undefined') {
-              init.credentials = 'include';
-            }
-          } catch (e) {
-            // noop
-          }
-          return _origFetch(input, init);
-        };
+        // For all other requests inject admin token header if not present
+        init = Object.assign({}, init);
+        init.headers = init.headers || {};
+
+        // If headers is a Headers object convert to plain object first
+        if (typeof Headers !== "undefined" && init.headers instanceof Headers) {
+          const h = {};
+          init.headers.forEach((v, k) => h[k] = v);
+          init.headers = h;
+        }
+
+        if (!init.headers['Authorization'] && !init.headers['authorization']) {
+          init.headers['Authorization'] = `Bearer ${HARDCODED_ADMIN_TOKEN}`;
+        }
+        if (!init.headers['x-admin-token'] && !init.headers['X-Admin-Token']) {
+          init.headers['x-admin-token'] = HARDCODED_ADMIN_TOKEN;
+        }
+        if (typeof init.credentials === 'undefined') init.credentials = 'include';
+      } catch (e) {
+        // noop
       }
-    })();
-  </script>
+      return _origFetch(input, init);
+    };
+  })();
+</script>
 
   <script>
     async function login() {
