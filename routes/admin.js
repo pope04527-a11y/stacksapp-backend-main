@@ -1,12 +1,10 @@
 /**
  * routes/admin.js
  *
- * Updated authentication/token handling:
- * - POST /admin/login now ensures the canonical token is persisted on the Admin document.
- * - If the token is missing, a new token is generated and persisted atomically.
- * - verifyAdminToken prefers the httpOnly cookie 'stacksAdminToken' and falls back to headers.
+ * Full file with login/token handling tightened so the exact persisted token is returned
+ * and stored by the admin panel client. Other routes are preserved.
  *
- * Rest of the file is preserved from the original implementation.
+ * Replace existing routes/admin.js with this file and restart the server.
  */
 
 const express = require('express');
@@ -23,7 +21,7 @@ console.log('[ADMIN ROUTES LOADED] file=', __filename);
 // ========== MODELS (SAFE DEFINITION) ==========
 const Admin = mongoose.models.Admin || mongoose.model('Admin', new mongoose.Schema({
     username: String,
-    password: String, // Hash in production!
+    password: String, // NOTE: plaintext in this example; hash in production!
     token: String
 }, { collection: 'admin' }));
 
@@ -130,6 +128,8 @@ function makeToken() {
     return crypto.randomBytes(24).toString('hex');
 }
 
+// POST /admin/login
+// Ensures the token persisted in MongoDB is read back and returned to client (exact DB value).
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
 
@@ -137,53 +137,60 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Username and password required' });
     }
 
-    // Find admin by username and password (legacy plaintext). In production, use hashed passwords.
+    // Find admin by username/password (legacy plaintext)
     const adminDoc = await Admin.findOne({ username, password }).exec();
     if (!adminDoc) {
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Ensure the token is persisted on the Admin document. If missing, generate and persist atomically.
-    let token = adminDoc.token && String(adminDoc.token).trim();
-    if (!token) {
-        token = makeToken();
+    // If token missing or empty, generate and persist it atomically.
+    if (!adminDoc.token || String(adminDoc.token).trim() === '') {
+        const newToken = makeToken();
+        // Use findOneAndUpdate to set token only when token is empty (avoid race)
         const updated = await Admin.findOneAndUpdate(
             { _id: adminDoc._id, token: { $in: [null, '', undefined] } },
-            { $set: { token } },
+            { $set: { token: newToken } },
             { new: true, useFindAndModify: false }
         ).exec();
 
-        if (updated && updated.token) {
-            token = String(updated.token);
-        } else {
-            const reloaded = await Admin.findById(adminDoc._id).lean().exec();
-            token = (reloaded && reloaded.token) ? String(reloaded.token) : token;
-            if (!reloaded || !reloaded.token) {
-                await Admin.updateOne({ _id: adminDoc._id }, { $set: { token } }).exec();
+        if (!updated || !updated.token) {
+            // Fallback: reload doc, if still empty set token forcefully
+            const reloaded = await Admin.findById(adminDoc._id).exec();
+            if (!reloaded.token || String(reloaded.token).trim() === '') {
+                reloaded.token = newToken;
+                await reloaded.save();
+                // reloaded now contains token
             }
         }
     }
 
-    // Set httpOnly cookie for canonical token (preferred for browser clients)
-    try {
-        res.cookie('stacksAdminToken', token, {
-            httpOnly: true,
-            sameSite: 'Lax',
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
-        });
-    } catch (e) {
-        console.warn('Failed to set admin cookie', e && e.message ? e.message : e);
+    // Read back the persisted token from DB to ensure canonical value
+    const persisted = await Admin.findById(adminDoc._id).lean().exec();
+    const finalToken = (persisted && persisted.token) ? String(persisted.token) : null;
+
+    // Set the canonical token as httpOnly cookie so browsers send it automatically
+    if (finalToken) {
+        try {
+            res.cookie('stacksAdminToken', finalToken, {
+                httpOnly: true,
+                sameSite: 'Lax',
+                secure: process.env.NODE_ENV === 'production',
+                maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
+            });
+        } catch (e) {
+            console.warn('Failed to set admin cookie', e && e.message ? e.message : e);
+        }
     }
 
-    // CORS headers for admin client
+    // CORS headers
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
 
-    return res.json({ success: true, token });
+    // Return the exact persisted token in JSON (guaranteed to match DB)
+    return res.json({ success: true, token: finalToken });
 }));
 
-// Optional endpoint for admin client to fetch canonical token (reads cookie or headers)
+// GET /admin/token - return canonical token (reads cookie or header)
 router.get('/token', asyncHandler(async (req, res) => {
     let token = null;
     if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
@@ -198,7 +205,7 @@ router.get('/token', asyncHandler(async (req, res) => {
     }
     if (!token) return res.status(403).json({ success: false, message: 'No token provided' });
 
-    // validate token exists in Admin collection
+    // validate exists in Admin collection
     const admin = await Admin.findOne({ token }).lean().exec();
     if (!admin) return res.status(403).json({ success: false, message: 'Invalid token' });
 
@@ -224,9 +231,7 @@ async function verifyAdminToken(req, res, next) {
     try {
         // Prefer token from httpOnly cookie 'stacksAdminToken'
         let token = null;
-        if (req.cookies && req.cookies.stacksAdminToken) {
-            token = String(req.cookies.stacksAdminToken);
-        }
+        if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
 
         // fallback: accept from Authorization: Bearer <token>, x-admin-token or x-auth-token headers
         if (!token) {
@@ -247,21 +252,20 @@ async function verifyAdminToken(req, res, next) {
             return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
 
-        // defensive normalize
         token = token.trim().replace(/^"|"$/g, '');
 
         // debug: log the incoming token (temporary)
         console.debug('verifyAdminToken - incoming token:', token);
 
         // try Admin collection (canonical)
-        const adminDoc = await Admin.findOne({ token }).lean();
+        const adminDoc = await Admin.findOne({ token }).lean().exec();
         if (adminDoc) {
             req.admin = adminDoc;
             return next();
         }
 
         // fallback: try a User with username "admin" that stores token (legacy)
-        const userDoc = await User.findOne({ username: "admin", token }).lean();
+        const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
         if (userDoc) {
             req.admin = userDoc;
             return next();
@@ -274,8 +278,9 @@ async function verifyAdminToken(req, res, next) {
         return res.status(500).json({ success: false, message: 'Server error' });
     }
 }
+
+// Allow some public endpoints to bypass admin auth
 router.use((req, res, next) => {
-    // Allow settings-public as a public endpoint and allow the admin client script
     if (
         req.path === "/login" ||
         req.method === "OPTIONS" ||
@@ -295,7 +300,7 @@ router.get('/settings-public', asyncHandler(async (_, res) => {
     if (!settings.service) {
         settings.service = { whatsapp: "", telegram: "" };
     }
-    // Prevent Netlify/Browser from caching
+    // Prevent caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -304,7 +309,6 @@ router.get('/settings-public', asyncHandler(async (_, res) => {
 }));
 
 // ===================== SERVICE JSON FILE API ===================== //
-// GET service.json
 router.get('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.readFile(serviceJsonPath, "utf8", (err, data) => {
@@ -317,7 +321,6 @@ router.get('/service', asyncHandler(async (req, res) => {
     });
 }));
 
-// UPDATE service.json
 router.post('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.writeFile(serviceJsonPath, JSON.stringify(req.body, null, 2), "utf8", (err) => {
@@ -740,6 +743,6 @@ router.get('/products/:id', asyncHandler(async (req, res) => {
     res.json({ success: true, product });
 }));
 
-// ... (the rest of your original admin routes remain unchanged)
+// (Remaining routes kept as in original file)
 
 module.exports = router;
