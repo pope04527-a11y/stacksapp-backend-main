@@ -277,59 +277,101 @@ async function checkPlatformStatus(req, res, next) {
 // ========== Auth middleware (unchanged behavior with safe local-dev fallback) ==========
 const verifyUserToken = async (req, res, next) => {
     // accept token from headers (x-auth-token) or Authorization Bearer
-    const rawHeader = req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || req.headers['authorization'] || '';
-    const token = rawHeader && String(rawHeader).startsWith('Bearer ') ? String(rawHeader).split(' ')[1] : rawHeader;
+    // Extended: also accept token from cookies, request body, or query to be more tolerant of client setups.
+    try {
+        let rawHeader = req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || req.headers['authorization'] || '';
+        let token = null;
 
-    // Also accept dev username from request body or query (dev-only fallback)
-    const devUsernameFromBody = req.body && req.body.devUsername ? String(req.body.devUsername) : null;
-    const devUsernameFromQuery = req.query && req.query.devUsername ? String(req.query.devUsername) : null;
+        // If header has "Bearer <token>" format
+        if (rawHeader && typeof rawHeader === 'string' && rawHeader.trim().toLowerCase().startsWith('bearer ')) {
+            token = String(rawHeader).trim().split(' ')[1];
+        } else if (rawHeader && typeof rawHeader === 'string' && rawHeader.trim()) {
+            // header might contain token directly (some clients set x-auth-token: <token>)
+            token = String(rawHeader).trim();
+        }
 
-    if (!token) {
-        // Local dev fallback: allow requests from localhost when NODE_ENV !== 'production'
-        if (process.env.NODE_ENV !== 'production' &&
-            (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
-            try {
-                // Prefer dev username from body/query, else optional x-dev-username header, else first DB user
-                const devHeader = req.headers['x-dev-username'];
-                const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
-                let devUser = null;
-                if (devUsername) devUser = await User.findOne({ username: devUsername });
-                // fallback to first user in DB
-                if (!devUser) devUser = await User.findOne({});
-                if (devUser) {
-                    req.user = devUser;
-                    return next();
+        // If no token yet, check cookies (if cookie-parser used)
+        if (!token && req.cookies && req.cookies.token) {
+            token = req.cookies.token;
+        }
+
+        // If still no token, try parsing Cookie header manually
+        if (!token && req.headers && req.headers.cookie) {
+            const cookieHeader = req.headers.cookie;
+            const parts = cookieHeader.split(';').map(p => p.trim());
+            for (const part of parts) {
+                const [k, v] = part.split('=');
+                if (!k) continue;
+                if (k === 'token' || k === 'authToken' || k.toLowerCase() === 'token') {
+                    token = decodeURIComponent(v || '').trim();
+                    break;
                 }
-                // No user in DB — continue to missing token response
-            } catch (err) {
-                console.warn('Dev auth fallback error:', err && err.message ? err.message : err);
             }
         }
-        return res.status(403).json({ success: false, message: 'Missing authentication token' });
-    }
-    const user = await User.findOne({ token });
-    if (!user) {
-        // Invalid token ��� allow local dev fallback similarly to missing token
-        if (process.env.NODE_ENV !== 'production' &&
-            (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
-            try {
-                const devHeader = req.headers['x-dev-username'];
-                const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
-                let devUser = null;
-                if (devUsername) devUser = await User.findOne({ username: devUsername });
-                if (!devUser) devUser = await User.findOne({});
-                if (devUser) {
-                    req.user = devUser;
-                    return next();
-                }
-            } catch (err) {
-                console.warn('Dev auth fallback error (invalid token):', err && err.message ? err.message : err);
-            }
+
+        // Also accept token from request body or query string (useful for some clients)
+        if (!token && req.body && (req.body.token || req.body.authToken)) {
+            token = req.body.token || req.body.authToken;
         }
-        return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+        if (!token && req.query && (req.query.token || req.query.authToken)) {
+            token = req.query.token || req.query.authToken;
+        }
+
+        // Also accept a custom header x-dev-username as previous dev fallback logic uses it
+        const devUsernameFromBody = req.body && req.body.devUsername ? String(req.body.devUsername) : null;
+        const devUsernameFromQuery = req.query && req.query.devUsername ? String(req.query.devUsername) : null;
+
+        if (!token) {
+            // Local dev fallback: allow requests from localhost when NODE_ENV !== 'production'
+            if (process.env.NODE_ENV !== 'production' &&
+                (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
+                try {
+                    // Prefer dev username from body/query, else optional x-dev-username header, else first DB user
+                    const devHeader = req.headers['x-dev-username'];
+                    const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
+                    let devUser = null;
+                    if (devUsername) devUser = await User.findOne({ username: devUsername });
+                    // fallback to first user in DB
+                    if (!devUser) devUser = await User.findOne({});
+                    if (devUser) {
+                        req.user = devUser;
+                        return next();
+                    }
+                    // No user in DB — continue to missing token response
+                } catch (err) {
+                    console.warn('Dev auth fallback error:', err && err.message ? err.message : err);
+                }
+            }
+            return res.status(403).json({ success: false, message: 'Missing authentication token' });
+        }
+
+        const user = await User.findOne({ token });
+        if (!user) {
+            // Invalid token — allow local dev fallback similarly to missing token
+            if (process.env.NODE_ENV !== 'production' &&
+                (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
+                try {
+                    const devHeader = req.headers['x-dev-username'];
+                    const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
+                    let devUser = null;
+                    if (devUsername) devUser = await User.findOne({ username: devUsername });
+                    if (!devUser) devUser = await User.findOne({});
+                    if (devUser) {
+                        req.user = devUser;
+                        return next();
+                    }
+                } catch (err) {
+                    console.warn('Dev auth fallback error (invalid token):', err && err.message ? err.message : err);
+                }
+            }
+            return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+        }
+        req.user = user;
+        next();
+    } catch (err) {
+        console.error('verifyUserToken error:', err && err.message ? err.message : err);
+        return res.status(500).json({ success: false, message: 'Authentication error' });
     }
-    req.user = user;
-    next();
 };
 
 // ========== Endpoints ==========
