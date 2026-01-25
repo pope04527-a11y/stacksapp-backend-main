@@ -154,62 +154,6 @@
   </div>
 
   <script>
-  (function(){
-    const HARDCODED_ADMIN_TOKEN = "REPLACE_WITH_TOKEN"; // <<-- keep your hardcoded token
-    if (!HARDCODED_ADMIN_TOKEN || HARDCODED_ADMIN_TOKEN.trim() === "") return;
-
-    try {
-      localStorage.setItem("stacksAdminToken", HARDCODED_ADMIN_TOKEN);
-      localStorage.setItem("adminToken", HARDCODED_ADMIN_TOKEN);
-    } catch (e) {}
-
-    const _origFetch = window.fetch.bind(window);
-
-    window.fetch = function(input, init = {}) {
-      try {
-        // Determine the request URL string for relative/Request inputs
-        let url = "";
-        if (typeof input === "string") url = input;
-        else if (input && input.url) url = input.url;
-
-        // Normalize to lower-case path for simple matching
-        const lower = String(url || "").toLowerCase();
-
-        // Do NOT inject authorization headers for login/token endpoints
-        if (lower.includes("/admin/login") || lower.includes("/admin/token")) {
-          // ensure credentials included for these endpoints
-          init = Object.assign({}, init);
-          if (typeof init.credentials === "undefined") init.credentials = "include";
-          return _origFetch(input, init);
-        }
-
-        // For all other requests inject admin token header if not present
-        init = Object.assign({}, init);
-        init.headers = init.headers || {};
-
-        // If headers is a Headers object convert to plain object first
-        if (typeof Headers !== "undefined" && init.headers instanceof Headers) {
-          const h = {};
-          init.headers.forEach((v, k) => h[k] = v);
-          init.headers = h;
-        }
-
-        if (!init.headers['Authorization'] && !init.headers['authorization']) {
-          init.headers['Authorization'] = `Bearer ${HARDCODED_ADMIN_TOKEN}`;
-        }
-        if (!init.headers['x-admin-token'] && !init.headers['X-Admin-Token']) {
-          init.headers['x-admin-token'] = HARDCODED_ADMIN_TOKEN;
-        }
-        if (typeof init.credentials === 'undefined') init.credentials = 'include';
-      } catch (e) {
-        // noop
-      }
-      return _origFetch(input, init);
-    };
-  })();
-</script>
-
-  <script>
     async function login() {
       const username = document.getElementById("username").value.trim();
       const password = document.getElementById("password").value;
@@ -244,9 +188,8 @@
         }
 
         if (res.ok && data.success && data.token) {
-          // Save token for future API calls (legacy fallback)
-          localStorage.setItem("stacksAdminToken", data.token);
-          localStorage.setItem("adminToken", data.token); // legacy fallback
+          // Save token for future API calls
+          localStorage.setItem("adminToken", data.token);
           errorMsg.className = "error success";
           errorMsg.textContent = "Login successful! Redirecting...";
           setTimeout(() => {
