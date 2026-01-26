@@ -1,13 +1,3 @@
-/**
- * routes/admin.js
- *
- * Updated admin routes with added /add-balance handler and defensive id handling.
- * Replace your existing routes/admin.js with this file and restart the server.
- *
- * NOTE: This file is based on the version you provided and only inserts the
- * add-balance endpoint (safe) and keeps existing behavior otherwise.
- */
-
 const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -17,12 +7,10 @@ const path = require('path');
 
 const router = express.Router();
 
-console.log('[ADMIN ROUTES LOADED] file=', __filename);
-
 // ========== MODELS (SAFE DEFINITION) ==========
 const Admin = mongoose.models.Admin || mongoose.model('Admin', new mongoose.Schema({
     username: String,
-    password: String, // NOTE: plaintext in this example; hash in production!
+    password: String, // Hash in production!
     token: String
 }, { collection: 'admin' }));
 
@@ -47,10 +35,7 @@ cloudinary.config({
 function asyncHandler(fn) {
     return function (req, res, next) {
         Promise.resolve(fn(req, res, next)).catch((e) => {
-            console.error(e && (e.stack || e.message) ? (e.stack || e.message) : e);
-            if (e && e.status && typeof e.status === 'number') {
-                return res.status(e.status).json({ success: false, message: e.message || 'Error' });
-            }
+            console.error(e);
             res.status(500).json({ success: false, message: e.message || 'Server error' });
         });
     };
@@ -86,7 +71,7 @@ router.get('/cloudinary-products', asyncHandler(async (req, res) => {
                 tags: true,
                 ...(next_cursor ? { next_cursor } : {})
             });
-            const pageProducts = (result.resources || [])
+            const pageProducts = result.resources
                 .filter(r =>
                     r.context && r.context.custom &&
                     r.context.custom.caption &&
@@ -119,130 +104,31 @@ router.get('/cloudinary-products', asyncHandler(async (req, res) => {
 }));
 
 // ----------------------- Authentication -----------------------
-// CORS preflight for admin login
 router.options('/login', (req, res) => {
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token, Authorization");
+    res.header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token");
     res.header("Access-Control-Allow-Credentials", "true");
     res.sendStatus(204);
 });
-
-// Stronger token generator: 32 bytes -> 64 hex chars
-function makeToken() {
-    return crypto.randomBytes(32).toString('hex');
-}
-
-// POST /admin/login
 router.post('/login', asyncHandler(async (req, res) => {
-    const { username, password } = req.body || {};
-
-    if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Username and password required' });
+    const { username, password } = req.body;
+    const admin = await Admin.findOne({ username, password }).lean();
+    if (admin) {
+        const token = crypto.randomBytes(24).toString('hex');
+        await Admin.updateOne({ _id: admin._id }, { $set: { token } });
+        res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+        res.header("Access-Control-Allow-Credentials", "true");
+        return res.json({ success: true, token });
     }
-
-    // Find admin by username/password (legacy plaintext)
-    const adminDoc = await Admin.findOne({ username, password }).exec();
-    if (!adminDoc) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    // Always generate a new token for each successful login.
-    const newToken = makeToken();
-
-    // Persist token with fallbacks
-    let finalToken = null;
-    let updatedAdmin = null;
-
-    try {
-        try {
-            updatedAdmin = await Admin.findOneAndUpdate(
-                { _id: adminDoc._id },
-                { $set: { token: newToken } },
-                { new: true, useFindAndModify: false }
-            ).lean().exec();
-        } catch (e) {
-            console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
-        }
-
-        if (!updatedAdmin) {
-            try {
-                updatedAdmin = await Admin.findOneAndUpdate(
-                    { username: adminDoc.username },
-                    { $set: { token: newToken } },
-                    { new: true, useFindAndModify: false }
-                ).lean().exec();
-            } catch (e) {
-                console.warn('Admin token update by username failed:', e && e.message ? e.message : e);
-            }
-        }
-
-        if (updatedAdmin && updatedAdmin.token) {
-            finalToken = String(updatedAdmin.token);
-        } else {
-            const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
-            if (reloaded) {
-                reloaded.token = newToken;
-                await reloaded.save();
-                finalToken = String(reloaded.token);
-            } else {
-                console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
-                return res.status(500).json({ success: false, message: 'Failed to persist token' });
-            }
-        }
-    } catch (err) {
-        console.error('Error persisting admin token:', err && err.stack ? err.stack : err);
-        return res.status(500).json({ success: false, message: 'Failed to persist token' });
-    }
-
-    // Set cookie
-    if (finalToken) {
-        try {
-            res.cookie('stacksAdminToken', finalToken, {
-                httpOnly: true,
-                sameSite: 'Lax',
-                secure: process.env.NODE_ENV === 'production',
-                maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
-            });
-        } catch (e) {
-            console.warn('Failed to set admin cookie', e && e.message ? e.message : e);
-        }
-    }
-
-    // CORS headers
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.header("Access-Control-Allow-Credentials", "true");
-
-    // Return the exact persisted token in JSON
-    return res.json({ success: true, token: finalToken });
-}));
-
-// GET /admin/token - return canonical token (reads cookie or header)
-router.get('/token', asyncHandler(async (req, res) => {
-    let token = null;
-    if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
-    if (!token) {
-        const headerAuth = req.headers['authorization'] || '';
-        const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
-        if (headerAuth && String(headerAuth).toLowerCase().startsWith('bearer ')) {
-            token = String(headerAuth).split(' ')[1];
-        } else if (headerAdmin) {
-            token = String(headerAdmin);
-        }
-    }
-    if (!token) return res.status(403).json({ success: false, message: 'No token provided' });
-
-    // validate exists in Admin collection
-    const admin = await Admin.findOne({ token }).lean().exec();
-    if (!admin) return res.status(403).json({ success: false, message: 'Invalid token' });
-
-    return res.json({ success: true, token: String(admin.token) });
+    res.status(401).json({ success: false, message: 'Invalid credentials' });
 }));
 
 // ----------------------- Serve admin settings client script (public) -----------------------
 router.get('/settings.js', (req, res) => {
     const filePath = path.join(__dirname, '..', 'public', 'admin-panel', 'js', 'settings.js');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    // prevent aggressive caching so admin gets latest script after deployments
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.sendFile(filePath, (err) => {
         if (err) {
@@ -254,54 +140,18 @@ router.get('/settings.js', (req, res) => {
 
 // ----------------------- Middleware: Protect All Other Admin Routes -----------------------
 async function verifyAdminToken(req, res, next) {
-    try {
-        let token = null;
-        if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
-
-        if (!token) {
-            const headerAuth = req.headers['authorization'] || '';
-            const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
-            const headerXAuth = req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || '';
-            if (headerAuth && String(headerAuth).toLowerCase().startsWith('bearer ')) {
-                token = String(headerAuth).split(' ')[1];
-            } else if (headerAdmin) {
-                token = String(headerAdmin);
-            } else if (headerXAuth) {
-                token = String(headerXAuth);
-            }
-        }
-
-        if (!token) {
-            console.warn('verifyAdminToken: no token provided');
-            return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
-        token = token.trim().replace(/^"|"$/g, '');
-
-        console.debug('verifyAdminToken - incoming token:', token);
-
-        const adminDoc = await Admin.findOne({ token }).lean().exec();
-        if (adminDoc) {
-            req.admin = adminDoc;
-            return next();
-        }
-
-        const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
-        if (userDoc) {
-            req.admin = userDoc;
-            return next();
-        }
-
-        console.warn('verifyAdminToken: token not found in Admin or User collections:', token);
-        return res.status(403).json({ success: false, message: 'Unauthorized' });
-    } catch (err) {
-        console.error('verifyAdminToken ERROR:', err && err.message ? err.message : err);
-        return res.status(500).json({ success: false, message: 'Server error' });
+    const token = req.headers['x-admin-token'];
+    // --------- UPDATED: Accept token from users collection for admin user as well ---------
+    let admin = await Admin.findOne({ token }).lean();
+    if (!admin) {
+        admin = await User.findOne({ username: "admin", token }).lean();
     }
+    if (token && admin) return next();
+    console.warn('verifyAdminToken: unauthorized request, x-admin-token=', token);
+    return res.status(403).json({ success: false, message: 'Unauthorized' });
 }
-
-// Allow some public endpoints to bypass admin auth
 router.use((req, res, next) => {
+    // Allow settings-public as a public endpoint and allow the admin client script
     if (
         req.path === "/login" ||
         req.method === "OPTIONS" ||
@@ -309,8 +159,7 @@ router.use((req, res, next) => {
         req.path === "/admin/refresh-products" ||
         req.path === "/settings-public" ||
         req.path === "/service" ||
-        req.path === "/settings.js" ||
-        req.path === "/token"
+        req.path === "/settings.js"
     ) return next();
     return verifyAdminToken(req, res, next);
 });
@@ -318,17 +167,26 @@ router.use((req, res, next) => {
 // ===================== PUBLIC SETTINGS FOR FRONTEND (NO AUTH) ===================== //
 router.get('/settings-public', asyncHandler(async (_, res) => {
     let settings = await Setting.findOne({}).lean() || {};
-    if (!settings.service) {
-        settings.service = { whatsapp: "", telegram: "" };
-    }
+
+    // Provide a compact, safe public view for the frontend
+    const publicSettings = {
+        service: settings.service || { whatsapp: "", telegram: "" },
+        // currency info for frontend display/formatting
+        currency: settings.currency || "",
+        currencySymbol: settings.currencySymbol || "",
+        currencyDecimals: (typeof settings.currencyDecimals === 'number') ? settings.currencyDecimals : 2
+    };
+
+    // Prevent Netlify/Browser from caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
-    res.json({ service: settings.service });
+    res.json(publicSettings);
 }));
 
 // ===================== SERVICE JSON FILE API ===================== //
+// GET service.json
 router.get('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.readFile(serviceJsonPath, "utf8", (err, data) => {
@@ -341,6 +199,7 @@ router.get('/service', asyncHandler(async (req, res) => {
     });
 }));
 
+// UPDATE service.json
 router.post('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.writeFile(serviceJsonPath, JSON.stringify(req.body, null, 2), "utf8", (err) => {
@@ -431,266 +290,6 @@ router.get('/pending-withdrawals', asyncHandler(async (_, res) => {
     res.json({ count });
 }));
 
-// ===================== WITHDRAWALS API ===================== //
-// GET /admin/withdrawals - list withdrawals
-router.get('/withdrawals', asyncHandler(async (req, res) => {
-    const list = await Withdrawal.find({}).lean().exec();
-    res.json(list);
-}));
-
-// PUT /admin/withdrawals/:id - update a withdrawal
-router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body || {};
-    const updated = await Withdrawal.findOneAndUpdate({ _id: id }, { $set: updates }, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    res.json({ success: true, withdrawal: updated });
-}));
-
-/**
- * Helper: Safe non-transactional approve fallback
- * Tries an atomic conditional update to ensure only pending withdrawals are modified.
- */
-async function approveWithdrawalFallback(id, processedBy, adminNote) {
-    const update = {
-        $set: {
-            status: 'Approved',
-            processedAt: new Date(),
-            processedBy
-        }
-    };
-    if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
-
-    const updated = await Withdrawal.findOneAndUpdate(
-        { _id: id, status: { $in: ['Pending', 'pending'] } },
-        update,
-        { new: true }
-    ).lean().exec();
-
-    if (!updated) {
-        const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
-        if (!exists) {
-            const err = new Error('Withdrawal not found');
-            err.status = 404;
-            throw err;
-        } else {
-            const err = new Error('Withdrawal is not pending');
-            err.status = 400;
-            throw err;
-        }
-    }
-    return updated;
-}
-
-/**
- * Helper: Safe non-transactional reject fallback
- * Uses conditional update for the withdrawal and attempts a separate refund update when possible.
- */
-async function rejectWithdrawalFallback(id, processedBy, adminNote) {
-    const update = {
-        $set: {
-            status: 'Rejected',
-            processedAt: new Date(),
-            processedBy
-        }
-    };
-    if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
-
-    const updated = await Withdrawal.findOneAndUpdate(
-        { _id: id, status: { $in: ['Pending', 'pending'] } },
-        update,
-        { new: true }
-    ).lean().exec();
-
-    if (!updated) {
-        const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
-        if (!exists) {
-            const err = new Error('Withdrawal not found');
-            err.status = 404;
-            throw err;
-        } else {
-            const err = new Error('Withdrawal is not pending');
-            err.status = 400;
-            throw err;
-        }
-    }
-
-    // Attempt refund if applicable
-    let refundedUser = null;
-    const amount = (typeof updated.amount === 'number') ? updated.amount : (updated.amount ? Number(updated.amount) : NaN);
-    let userQuery = null;
-    if (updated.username) userQuery = { username: String(updated.username) };
-    else if (updated.userId && mongoose.Types.ObjectId.isValid(String(updated.userId))) userQuery = { _id: updated.userId };
-
-    if (userQuery && !isNaN(amount) && amount > 0) {
-        const userUpdateRes = await User.findOneAndUpdate(userQuery, { $inc: { balance: amount } }, { new: true }).lean().exec();
-        if (userUpdateRes) {
-            refundedUser = { username: userUpdateRes.username, balance: userUpdateRes.balance };
-        } else {
-            console.warn('Reject refund: user not found for', userQuery);
-        }
-    }
-
-    return { updated, refundedUser };
-}
-
-// PATCH approve (transactional with fallback)
-router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
-    }
-
-    const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
-    const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
-
-    let session;
-    try {
-        session = await mongoose.startSession();
-    } catch (e) {
-        session = null;
-    }
-
-    if (session && typeof session.withTransaction === 'function') {
-        try {
-            let updatedWithdrawal = null;
-            await session.withTransaction(async () => {
-                const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
-                if (!w) {
-                    const err = new Error('Withdrawal not found');
-                    err.status = 404;
-                    throw err;
-                }
-
-                const currentStatus = (w.status || '').toString();
-                if (currentStatus.toLowerCase() !== 'pending') {
-                    const err = new Error('Withdrawal is not pending');
-                    err.status = 400;
-                    throw err;
-                }
-
-                w.status = 'Approved';
-                w.processedAt = new Date();
-                w.processedBy = processedBy;
-                if (adminNote) w.adminNote = adminNote;
-                await w.save({ session });
-
-                updatedWithdrawal = w.toObject();
-            });
-
-            try { session.endSession(); } catch (e) {}
-            return res.json({ success: true, withdrawal: updatedWithdrawal });
-        } catch (err) {
-            try { session.endSession(); } catch (e) {}
-            console.warn('Transactional approve failed, falling back to non-transactional method:', err && err.message ? err.message : err);
-        }
-    } else {
-        if (session) try { session.endSession(); } catch (e) {}
-        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for approve');
-    }
-
-    try {
-        const updated = await approveWithdrawalFallback(id, processedBy, adminNote);
-        return res.json({ success: true, withdrawal: updated });
-    } catch (err) {
-        if (err && err.status) return res.status(err.status).json({ success: false, message: err.message });
-        console.error('Approve fallback error:', err && err.stack ? err.stack : err);
-        return res.status(500).json({ success: false, message: 'Failed to approve withdrawal' });
-    }
-}));
-
-// PATCH reject (transactional with fallback)
-router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
-    }
-
-    const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
-    const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
-
-    let session;
-    try {
-        session = await mongoose.startSession();
-    } catch (e) {
-        session = null;
-    }
-
-    if (session && typeof session.withTransaction === 'function') {
-        try {
-            let updatedWithdrawal = null;
-            let refundedUser = null;
-            await session.withTransaction(async () => {
-                const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
-                if (!w) {
-                    const err = new Error('Withdrawal not found');
-                    err.status = 404;
-                    throw err;
-                }
-
-                const currentStatus = (w.status || '').toString();
-                if (currentStatus.toLowerCase() !== 'pending') {
-                    const err = new Error('Withdrawal is not pending');
-                    err.status = 400;
-                    throw err;
-                }
-
-                w.status = 'Rejected';
-                w.processedAt = new Date();
-                w.processedBy = processedBy;
-                if (adminNote) w.adminNote = adminNote;
-
-                const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
-                let userQuery = null;
-                if (w.username) userQuery = { username: String(w.username) };
-                else if (w.userId && mongoose.Types.ObjectId.isValid(String(w.userId))) userQuery = { _id: w.userId };
-
-                if (userQuery && !isNaN(amount) && amount > 0) {
-                    const userDoc = await User.findOne(userQuery).session(session).exec();
-                    if (userDoc) {
-                        userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
-                        await userDoc.save({ session });
-                        refundedUser = { username: userDoc.username, balance: userDoc.balance };
-                    } else {
-                        console.warn('Rejecting withdrawal but user not found to refund (transactional):', userQuery);
-                    }
-                }
-
-                await w.save({ session });
-                updatedWithdrawal = w.toObject();
-            });
-
-            try { session.endSession(); } catch (e) {}
-            return res.json({ success: true, withdrawal: updatedWithdrawal, refundedUser: refundedUser || null });
-        } catch (err) {
-            try { session.endSession(); } catch (e) {}
-            console.warn('Transactional reject failed, falling back to non-transactional method:', err && err.message ? err.message : err);
-        }
-    } else {
-        if (session) try { session.endSession(); } catch (e) {}
-        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for reject');
-    }
-
-    try {
-        const { updated, refundedUser } = await rejectWithdrawalFallback(id, processedBy, adminNote);
-        return res.json({ success: true, withdrawal: updated, refundedUser: refundedUser || null });
-    } catch (err) {
-        if (err && err.status) return res.status(err.status).json({ success: false, message: err.message });
-        console.error('Reject fallback error:', err && err.stack ? err.stack : err);
-        return res.status(500).json({ success: false, message: 'Failed to reject withdrawal' });
-    }
-}));
-
-// DELETE
-router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const result = await Withdrawal.deleteOne({ _id: id }).exec();
-    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    res.json({ success: true });
-}));
-
 // ===================== SETTINGS API ENHANCED (SERVICE & ACTIVITY LOCK) ===================== //
 router.get('/settings', asyncHandler(async (_, res) => {
     let settings = await Setting.findOne({}).lean() || {};
@@ -698,9 +297,10 @@ router.get('/settings', asyncHandler(async (_, res) => {
     // Ensure all fields are always present for the frontend
     settings.siteName = settings.siteName || "";
     settings.currency = settings.currency || "";
+    // New defaults for currencySymbol and decimals
     settings.currencySymbol = settings.currencySymbol || "";
     settings.currencyDecimals = (typeof settings.currencyDecimals === 'number') ? settings.currencyDecimals : 2;
-    settings.currencyPosition = settings.currencyPosition || "after";
+    settings.currencyPosition = settings.currencyPosition || "after"; // optional: "before" or "after"
 
     settings.defaultVip = settings.defaultVip || 1;
     settings.inviteBonus = settings.inviteBonus || 0;
@@ -711,6 +311,7 @@ router.get('/settings', asyncHandler(async (_, res) => {
     settings.minWithdraw = settings.minWithdraw || 0;
     settings.maxWithdraw = settings.maxWithdraw || 0;
 
+    // Normalise withdraw fee fields: support legacy `withdrawFee` and canonical `withdrawFeePercent`
     if (typeof settings.withdrawFeePercent === 'undefined' && typeof settings.withdrawFee !== 'undefined') {
         settings.withdrawFeePercent = settings.withdrawFee;
     }
@@ -736,10 +337,14 @@ router.get('/settings', asyncHandler(async (_, res) => {
         if (!Array.isArray(settings.activityLock.users)) settings.activityLock.users = [];
     }
 
+    // platform closing helpers (ensure naming consistency)
     settings.platformClosed = !!settings.platformClosed;
     settings.autoOpenHourUK = typeof settings.autoOpenHourUK === 'number' ? settings.autoOpenHourUK : 10;
     settings.whoCanAccessDuringClose = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
 
+    // Provide frontend-friendly aliases:
+    // - autoOpenTime: "HH:00" derived from autoOpenHourUK so <input type="time"> can be populated
+    // - allowList: alias for whoCanAccessDuringClose
     const hour = Number(settings.autoOpenHourUK);
     if (!isNaN(hour) && hour >= 0 && hour <= 23) {
         const hh = String(hour).padStart(2, '0');
@@ -753,6 +358,7 @@ router.get('/settings', asyncHandler(async (_, res) => {
 }));
 
 router.post('/settings', asyncHandler(async (req, res) => {
+    // Debug logging to help ensure requests reach this handler and payloads are as-expected
     console.log('ADMIN POST /admin/settings called - x-admin-token:', req.headers['x-admin-token']);
     try {
         console.log('ADMIN POST /admin/settings payload (truncated):', JSON.stringify(req.body).slice(0, 1000));
@@ -761,7 +367,11 @@ router.post('/settings', asyncHandler(async (req, res) => {
     }
 
     const updates = req.body || {};
+
+    // Build an update document (use atomic findOneAndUpdate with upsert to avoid race/duplicate issues)
     const updateDoc = {};
+
+    // whitelisted simple fields
     const simpleFields = [
         "siteName", "currency", "currencySymbol", "currencyDecimals", "currencyPosition",
         "defaultVip", "inviteBonus", "telegramGroup",
@@ -773,11 +383,13 @@ router.post('/settings', asyncHandler(async (req, res) => {
         if (updates[key] !== undefined) updateDoc[key] = updates[key];
     }
 
+    // Ensure currencyDecimals is a number if provided
     if (updates.currencyDecimals !== undefined) {
         const parsed = Number(updates.currencyDecimals);
         updateDoc.currencyDecimals = Number.isFinite(parsed) ? parsed : 2;
     }
 
+    // withdraw fee normalization
     if (updates.withdrawFeePercent !== undefined) {
         const parsed = Number(updates.withdrawFeePercent);
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
@@ -786,10 +398,13 @@ router.post('/settings', asyncHandler(async (req, res) => {
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
     }
 
+    // service merge (keep existing keys if not provided)
     if (updates.service && typeof updates.service === 'object') {
+        // We'll set service fully to provided object (merge on DB side)
         updateDoc.service = { ...(updates.service || {}) };
     }
 
+    // activityLock normalization
     if (updates.activityLock && typeof updates.activityLock === 'object') {
         const acl = {
             enabled: !!updates.activityLock.enabled,
@@ -803,10 +418,12 @@ router.post('/settings', asyncHandler(async (req, res) => {
         updateDoc.activityLock = acl;
     }
 
+    // platform closing controls
     if (updates.platformClosed !== undefined) {
         updateDoc.platformClosed = !!updates.platformClosed;
     }
 
+    // parse autoOpenTime "HH:MM" to autoOpenHourUK if provided
     if (updates.autoOpenHourUK !== undefined && !isNaN(Number(updates.autoOpenHourUK))) {
         updateDoc.autoOpenHourUK = Number(updates.autoOpenHourUK);
     } else if (typeof updates.autoOpenTime === 'string' && updates.autoOpenTime.trim()) {
@@ -817,6 +434,7 @@ router.post('/settings', asyncHandler(async (req, res) => {
         }
     }
 
+    // allowList / whoCanAccessDuringClose normalization
     if (updates.allowList !== undefined) {
         if (Array.isArray(updates.allowList)) {
             updateDoc.whoCanAccessDuringClose = updates.allowList.map(u => String(u || '').trim()).filter(Boolean);
@@ -835,9 +453,12 @@ router.post('/settings', asyncHandler(async (req, res) => {
         }
     }
 
+    // Ensure some defaults are set if absent (do not overwrite existing DB keys unnecessarily)
+    // We'll rely on upsert to create missing document with provided defaults where needed
     if (typeof updateDoc.service === 'undefined') {
         // leave service untouched unless provided
     } else {
+        // ensure keys exist
         updateDoc.service.whatsapp = updateDoc.service.whatsapp || "";
         updateDoc.service.telegram = updateDoc.service.telegram || "";
     }
@@ -846,6 +467,7 @@ router.post('/settings', asyncHandler(async (req, res) => {
         // leave untouched
     }
 
+    // Perform atomic update with upsert and return the new doc
     const saved = await Setting.findOneAndUpdate(
         {},
         { $set: updateDoc },
@@ -881,40 +503,6 @@ router.post('/users', asyncHandler(async (req, res) => {
     await User.create(user);
     res.json({ success: true, user });
 }));
-
-// ======= ADD-BALANCE: Admin endpoint to add balance and create transaction =======
-router.post('/add-balance', asyncHandler(async (req, res) => {
-    const { username, amount } = req.body;
-
-    if (!username) return res.status(400).json({ success: false, message: 'username is required' });
-    if (typeof amount === 'undefined') return res.status(400).json({ success: false, message: 'amount is required' });
-
-    const numAmount = Number(amount);
-    if (isNaN(numAmount)) return res.status(400).json({ success: false, message: 'amount must be a number' });
-
-    // Increment user's balance and return the updated document
-    const user = await User.findOneAndUpdate({ username }, { $inc: { balance: numAmount } }, { new: true }).lean();
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-    // Create a transaction record. Many schemas require userId — include it to avoid validation errors.
-    const newTransaction = {
-        user: username,
-        userId: user._id, // <-- ensure required field is present
-        type: "admin_add_balance",
-        amount: numAmount,
-        status: "Completed",
-        createdAt: new Date().toISOString()
-    };
-
-    try {
-      await Transaction.create(newTransaction);
-    } catch (e) {
-      console.warn('Failed to create transaction record for add-balance:', e && e.message ? e.message : e);
-    }
-
-    res.json({ success: true, balance: user.balance, user });
-}));
-
 router.put('/users/:username', asyncHandler(async (req, res) => {
     const { username } = req.params;
     const updates = req.body;
@@ -943,6 +531,394 @@ router.get('/users/:username', asyncHandler(async (req, res) => {
     res.json({ success: true, user });
 }));
 
-// (Remaining routes kept as in original file)
+router.post('/reset-user-task-set', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const userDoc = await User.findOne({ username });
+    const newSet = (userDoc && typeof userDoc.currentSet === 'number') ? userDoc.currentSet + 1 : 2;
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0, currentSet: newSet } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress and set reset for user.' });
+}));
+
+router.post('/reset-user-task-progress', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0 } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress reset for user.' });
+}));
+
+router.post('/vip/bulk-upgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.min(user.vipLevel + 1, 10);
+            await user.save();
+            changed++;
+        }
+    }
+    res.json({ success: true, changed });
+}));
+router.post('/vip/bulk-downgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.max(user.vipLevel - 1, 1);
+            await user.save();
+            changed++;
+        }
+    }
+    res.json({ success: true, changed });
+}));
+
+router.get('/products', asyncHandler(async (_, res) => {
+    const products = await Product.find({}).lean();
+    res.json(products);
+}));
+router.post('/products', asyncHandler(async (req, res) => {
+    const { name, description, price, image } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: 'Product name is required' });
+    const exists = await Product.findOne({ name }).lean();
+    if (exists) return res.status(409).json({ success: false, message: 'Product already exists' });
+    const product = {
+        name,
+        description: description || "",
+        price: price || 0,
+        image: image || "",
+        status: "Active"
+    };
+    await Product.create(product);
+    res.json({ success: true, product });
+}));
+router.put('/products/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    const product = await Product.findByIdAndUpdate(id, updates, { new: true }).lean();
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, product });
+}));
+router.patch('/products/:id/disable', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const product = await Product.findById(id).lean();
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    const newStatus = product.status === "Suspended" ? "Active" : "Suspended";
+    await Product.updateOne({ _id: id }, { $set: { status: newStatus } });
+    res.json({ success: true, status: newStatus });
+}));
+router.delete('/products/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Product.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true });
+}));
+router.get('/products/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const product = await Product.findById(id).lean();
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, product });
+}));
+
+router.get('/combos', asyncHandler(async (_, res) => {
+    const combos = await Combo.find({}).lean();
+    res.json(combos);
+}));
+router.post('/combos', asyncHandler(async (req, res) => {
+    const { username, triggerTaskNumber, products } = req.body;
+    if (!username || !triggerTaskNumber || !products || !Array.isArray(products) || products.length === 0)
+        return res.status(400).json({ success: false, message: 'All fields required and at least one product.' });
+    const combo = {
+        username,
+        triggerTaskNumber,
+        products
+    };
+    await Combo.create(combo);
+    res.json({ success: true, combo });
+}));
+router.put('/combos/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid combo id' });
+    }
+    const { username, triggerTaskNumber, products } = req.body;
+    const combo = await Combo.findById(id);
+    if (!combo) return res.status(404).json({ success: false, message: 'Combo not found' });
+    if (username) combo.username = username;
+    if (triggerTaskNumber) combo.triggerTaskNumber = triggerTaskNumber;
+    if (products && Array.isArray(products)) combo.products = products;
+    await combo.save();
+    res.json({ success: true, combo });
+}));
+router.delete('/combos/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid combo id' });
+    }
+    const result = await Combo.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Combo not found' });
+    res.json({ success: true });
+}));
+router.get('/combos/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid combo id' });
+    }
+    const combo = await Combo.findById(id).lean();
+    if (!combo) return res.status(404).json({ success: false, message: 'Combo not found' });
+    res.json({ success: true, combo });
+}));
+
+router.get('/tasks', asyncHandler(async (_, res) => {
+    const tasks = await Task.find({}).lean();
+    res.json(tasks);
+}));
+router.post('/tasks', asyncHandler(async (req, res) => {
+    const { user, name, status } = req.body;
+    if (!user || !name) return res.status(400).json({ success: false, message: 'User and Task Name are required' });
+    const task = {
+        user,
+        name,
+        status: status || "Pending",
+        createdAt: new Date().toISOString()
+    };
+    await Task.create(task);
+    res.json({ success: true, task });
+}));
+router.put('/tasks/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    const task = await Task.findByIdAndUpdate(id, updates, { new: true }).lean();
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+    res.json({ success: true, task });
+}));
+router.patch('/tasks/:id/complete', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const task = await Task.findById(id).lean();
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+    await Task.updateOne({ _id: id }, { $set: { status: "Completed" } });
+    res.json({ success: true, status: "Completed" });
+}));
+router.delete('/tasks/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Task.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Task not found' });
+    res.json({ success: true });
+}));
+router.get('/tasks/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const task = await Task.findById(id).lean();
+    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
+    res.json({ success: true, task });
+}));
+
+router.get('/transactions', asyncHandler(async (_, res) => {
+    const deposits = await Transaction.find({}).lean();
+    const withdrawals = await Withdrawal.find({}).lean();
+    res.json({ deposits, withdrawals });
+}));
+router.put('/transactions/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    const txn = await Transaction.findByIdAndUpdate(id, updates, { new: true }).lean();
+    if (!txn) return res.status(404).json({ success: false, message: 'Transaction not found' });
+    res.json({ success: true, transaction: txn });
+}));
+router.delete('/transactions/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Transaction.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Transaction not found' });
+    res.json({ success: true });
+}));
+router.get('/transactions/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const txn = await Transaction.findById(id).lean();
+    if (!txn) return res.status(404).json({ success: false, message: 'Transaction not found' });
+    res.json({ success: true, transaction: txn });
+}));
+
+router.get('/withdrawals', asyncHandler(async (_, res) => {
+    const withdrawals = await Withdrawal.find({}).lean();
+    res.json(withdrawals);
+}));
+router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    const withdrawal = await Withdrawal.findByIdAndUpdate(id, updates, { new: true }).lean();
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal });
+}));
+router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const withdrawal = await Withdrawal.findById(id).lean();
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    await Withdrawal.updateOne({ _id: id }, { $set: { status: "Approved" } });
+    res.json({ success: true, status: "Approved" });
+}));
+router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const withdrawal = await Withdrawal.findById(id).lean();
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    await Withdrawal.updateOne({ _id: id }, { $set: { status: "Rejected" } });
+    res.json({ success: true, status: "Rejected" });
+}));
+router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Withdrawal.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true });
+}));
+router.get('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const withdrawal = await Withdrawal.findById(id).lean();
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal });
+}));
+
+router.get('/notifications', asyncHandler(async (_, res) => {
+    const notifications = await Notification.find({}).lean();
+    res.json(notifications);
+}));
+router.post('/notifications', asyncHandler(async (req, res) => {
+    const { title, message, status, recipients } = req.body;
+    if (!title || !message) return res.status(400).json({ success: false, message: 'Title and message are required' });
+    const notification = {
+        title,
+        message,
+        status: status || "Active",
+        recipients: recipients && Array.isArray(recipients) && recipients.length > 0
+            ? recipients
+            : ["all"],
+        createdAt: new Date().toISOString()
+    };
+    await Notification.create(notification);
+    res.json({ success: true, notification });
+}));
+router.put('/notifications/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    const notification = await Notification.findByIdAndUpdate(id, updates, { new: true }).lean();
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+    res.json({ success: true, notification });
+}));
+router.patch('/notifications/:id/deactivate', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const notification = await Notification.findById(id).lean();
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+    await Notification.updateOne({ _id: id }, { $set: { status: "Inactive" } });
+    res.json({ success: true, status: "Inactive" });
+}));
+router.delete('/notifications/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Notification.deleteOne({ _id: id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Notification not found' });
+    res.json({ success: true });
+}));
+router.get('/notifications/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const notification = await Notification.findById(id).lean();
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+    res.json({ success: true, notification });
+}));
+
+router.get('/user/:username/notifications', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const notifications = await Notification.find({
+        $or: [
+            { recipients: "all" },
+            { recipients: username }
+        ]
+    }).lean();
+    res.json(notifications);
+}));
+
+router.post('/update-vip', asyncHandler(async (req, res) => {
+    const { username, vip } = req.body;
+    const user = await User.findOneAndUpdate({ username }, { $set: { vipLevel: vip } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false });
+    res.json({ success: true });
+}));
+
+// ======= FIXED add-balance: ensure userId is included in Transaction to satisfy schemas that require it =======
+router.post('/add-balance', asyncHandler(async (req, res) => {
+    const { username, amount } = req.body;
+
+    // Basic validation and normalization
+    if (!username) return res.status(400).json({ success: false, message: 'username is required' });
+    if (typeof amount === 'undefined') return res.status(400).json({ success: false, message: 'amount is required' });
+
+    const numAmount = Number(amount);
+    if (isNaN(numAmount)) return res.status(400).json({ success: false, message: 'amount must be a number' });
+
+    // Increment user's balance and return the updated document
+    const user = await User.findOneAndUpdate({ username }, { $inc: { balance: numAmount } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Create a transaction record. Many schemas require userId — include it to avoid validation errors.
+    const newTransaction = {
+        user: username,
+        userId: user._id, // <-- ensure required field is present
+        type: "admin_add_balance",
+        amount: numAmount,
+        status: "Completed",
+        createdAt: new Date().toISOString()
+    };
+
+    await Transaction.create(newTransaction);
+
+    // Return success and updated balance for client convenience
+    res.json({ success: true, balance: user.balance, user });
+}));
+
+router.post('/reset-user', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false });
+    await User.updateOne({ username }, {
+        $set: {
+            balance: 0,
+            commission: 0,
+            commissionToday: 0,
+            status: "Active"
+        }
+    });
+    res.json({ success: true });
+}));
+router.post('/assign-combo', asyncHandler(async (req, res) => {
+    const { username, triggerTaskNumber, products } = req.body;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    await Combo.create({
+        username,
+        triggerTaskNumber,
+        products
+    });
+
+    await Log.create({
+        action: 'Combo Assigned (Manual)',
+        username,
+        combo: { triggerTaskNumber, products },
+        timestamp: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: 'Combo assigned successfully' });
+}));
+router.get('/export-logs-csv', asyncHandler(async (_, res) => {
+    const logs = await Log.find({}).lean();
+    if (!logs.length) return res.status(404).send('No logs found');
+    const headers = Object.keys(logs[0]).join(',');
+    const csv = [headers, ...logs.map(log => Object.values(log).map(v => `"${v}"`).join(','))].join('\n');
+    res.setHeader('Content-Disposition', 'attachment; filename=logs.csv');
+    res.setHeader('Content-Type', 'text/csv');
+    res.send(csv);
+}));
 
 module.exports = router;
