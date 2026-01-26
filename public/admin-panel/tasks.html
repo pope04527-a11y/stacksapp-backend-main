@@ -9,12 +9,76 @@
 </head>
 <body>
   <script>
-    // Redirect to login if token missing
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      alert("Access denied. Please login.");
-      window.location.href = "/admin-panel/login.html";
+  (function(){
+    // Inline admin auth helper (same pattern as other pages)
+    function getToken(){
+      return localStorage.getItem('stacksAdminToken') || localStorage.getItem('adminToken') || null;
     }
+
+    function requireAuth(){
+      const t = getToken();
+      if (!t) {
+        alert('Access denied. Please login.');
+        window.location.href = '/admin-panel/login.html';
+      }
+      return t;
+    }
+
+    async function authFetch(url, opts){
+      opts = Object.assign({}, opts || {});
+      opts.headers = Object.assign({}, opts.headers || {});
+
+      const token = getToken();
+      if (token) {
+        opts.headers['x-admin-token'] = token;
+        if (!opts.headers['Authorization'] && !opts.headers['authorization']) {
+          opts.headers['Authorization'] = 'Bearer ' + token;
+        }
+      }
+
+      // Ensure the httpOnly cookie (if set by server) is sent as well
+      opts.credentials = 'include';
+
+      // If sending body and no content-type set, default to JSON
+      if (opts.body && !opts.headers['Content-Type'] && !(opts.body instanceof FormData)) {
+        opts.headers['Content-Type'] = 'application/json';
+      }
+
+      let res;
+      try {
+        res = await fetch(url, opts);
+      } catch (err) {
+        // network error -> bubble up
+        throw err;
+      }
+
+      // Central handling of expired/unauthorized sessions
+      if (res.status === 401 || res.status === 403) {
+        // Clear client-side token(s) to force login
+        try {
+          localStorage.removeItem('stacksAdminToken');
+          localStorage.removeItem('adminToken');
+          // expire convenience cookie if present
+          document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        } catch(e){/*ignore*/}
+        // Redirect to login
+        window.location.href = '/admin-panel/login.html';
+        const err = new Error('Unauthorized');
+        err.status = res.status;
+        throw err;
+      }
+
+      return res;
+    }
+
+    // expose helpers
+    window.requireAuth = requireAuth;
+    window.authFetch = authFetch;
+    window.getAdminToken = getToken;
+
+    // ensure presence of token
+    requireAuth();
+  })();
   </script>
 
   <div class="main-content" id="mainContent">
@@ -78,16 +142,33 @@
     let editingTaskIndex = null;
     let allTasks = [];
 
-    // Fetch all tasks from API
+    // Safe fetchTasks: treat 404 as empty list (do not logout), 401/403 triggers logout
     async function fetchTasks() {
       try {
-        const res = await fetch('/admin/tasks', {
-          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
-        });
-        if (!res.ok) throw new Error('Unauthorized');
+        const fetcher = (typeof authFetch === 'function') ? authFetch : async (u, o) => fetch(u, Object.assign({ credentials: 'include' }, o));
+        const res = await fetcher('/admin/tasks');
+
+        if (res.status === 404) {
+          allTasks = [];
+          renderTasks(allTasks);
+          return;
+        }
+
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Unauthorized');
+        }
+
+        if (!res.ok) {
+          console.error('Failed to fetch tasks', res.status);
+          allTasks = [];
+          renderTasks(allTasks);
+          return;
+        }
+
         allTasks = await res.json();
         renderTasks(allTasks);
       } catch (err) {
+        console.error('fetchTasks error:', err);
         alert("Session expired or unauthorized. Please login again.");
         logout();
       }
@@ -101,12 +182,11 @@
         const checked = selectedTasks.has(idx) ? "checked" : "";
         const taskId = task.taskCode || task.id || ""; // Use taskCode as Task ID
         const user = task.username || task.user || "";
-        const name = (task.product && task.product.name) ? task.product.name : "";
+        const name = (task.product && task.product.name) ? task.product.name : (task.name || '');
         const status = task.status || "Pending";
-        // Use completedAt (main date of task), fall back to startedAt
         const createdAt = task.completedAt
           ? new Date(task.completedAt).toLocaleString()
-          : (task.startedAt ? new Date(task.startedAt).toLocaleString() : "");
+          : (task.startedAt ? new Date(task.startedAt).toLocaleString() : (task.createdAt ? new Date(task.createdAt).toLocaleString() : ""));
         table.innerHTML += `
           <tr>
             <td><input type="checkbox" onclick="selectTask(${idx}, this)" ${checked}></td>
@@ -150,7 +230,7 @@
       const query = document.getElementById("searchInput").value.toLowerCase();
       const filtered = allTasks.filter(task =>
         ((task.username || task.user || "").toLowerCase().includes(query)) ||
-        ((task.product && task.product.name ? task.product.name : "").toLowerCase().includes(query)) ||
+        ((task.product && task.product.name ? task.product.name : (task.name || "")).toLowerCase().includes(query)) ||
         ((task.status || "").toLowerCase().includes(query))
       );
       renderTasks(filtered);
@@ -173,30 +253,32 @@
       const name = document.getElementById("modalTaskName").value.trim();
       const status = document.getElementById("modalStatus").value;
 
-      if (editingTaskIndex !== null) {
-        // Edit
-        const task = allTasks[editingTaskIndex];
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-          method: 'PUT',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ user, name, status })
-        });
-        showToast("Task updated!");
-      } else {
-        // Add
-        await fetch('/admin/tasks', {
-          method: 'POST',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ user, name, status })
-        });
-        showToast("Task added!");
+      try {
+        if (editingTaskIndex !== null) {
+          // Edit
+          const task = allTasks[editingTaskIndex];
+          const id = encodeURIComponent(task.taskCode || task.id);
+          const res = await authFetch(`/admin/tasks/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ user, name, status })
+          });
+          if (!res.ok) throw new Error('Failed to update task');
+          showToast("Task updated!");
+        } else {
+          // Add
+          const res = await authFetch('/admin/tasks', {
+            method: 'POST',
+            body: JSON.stringify({ user, name, status })
+          });
+          if (!res.ok) throw new Error('Failed to add task');
+          showToast("Task added!");
+        }
+      } catch (err) {
+        console.error('task save error', err);
+        showToast("Failed to save task.");
+        // If unauthorized, authFetch already redirected; otherwise continue
       }
+
       closeTaskModal();
       fetchTasks();
     };
@@ -206,7 +288,7 @@
       const task = allTasks[idx];
       document.getElementById("taskModalTitle").textContent = "Edit Task";
       document.getElementById("modalUser").value = task.username || task.user || "";
-      document.getElementById("modalTaskName").value = (task.product && task.product.name) ? task.product.name : "";
+      document.getElementById("modalTaskName").value = (task.product && task.product.name) ? task.product.name : (task.name || "");
       document.getElementById("modalStatus").value = task.status || "Pending";
       document.getElementById("taskModal").style.display = "block";
     }
@@ -214,24 +296,31 @@
     // Mark complete
     async function completeTask(idx) {
       const task = allTasks[idx];
-      await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
-        method: 'PATCH',
-        headers: { "x-admin-token": localStorage.getItem('adminToken') }
-      });
-      showToast("Task marked as completed.");
-      fetchTasks();
+      try {
+        const id = encodeURIComponent(task.taskCode || task.id);
+        const res = await authFetch(`/admin/tasks/${id}/complete`, { method: 'PATCH' });
+        if (!res.ok) throw new Error('Failed to complete task');
+        showToast("Task marked as completed.");
+        fetchTasks();
+      } catch (e) {
+        console.error('completeTask error', e);
+        showToast("Failed to mark task complete.");
+      }
     }
 
     // Delete task
     async function deleteTask(idx) {
       const task = allTasks[idx];
-      if (confirm("Are you sure you want to delete this task?")) {
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-          method: 'DELETE',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
+      if (!confirm("Are you sure you want to delete this task?")) return;
+      try {
+        const id = encodeURIComponent(task.taskCode || task.id);
+        const res = await authFetch(`/admin/tasks/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete task');
         showToast("Task deleted.");
         fetchTasks();
+      } catch (e) {
+        console.error('deleteTask error', e);
+        showToast("Failed to delete task.");
       }
     }
 
@@ -239,28 +328,31 @@
     async function bulkCompleteTasks() {
       for (let idx of selectedTasks) {
         const task = allTasks[idx];
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
-          method: 'PATCH',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
+        try {
+          const id = encodeURIComponent(task.taskCode || task.id);
+          await authFetch(`/admin/tasks/${id}/complete`, { method: 'PATCH' });
+        } catch (e) {
+          // continue
+        }
       }
       showToast("Selected tasks marked as completed.");
       fetchTasks();
       selectedTasks.clear();
     }
     async function bulkDeleteTasks() {
-      if (confirm("Are you sure you want to delete selected tasks?")) {
-        for (let idx of selectedTasks) {
-          const task = allTasks[idx];
-          await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-            method: 'DELETE',
-            headers: { "x-admin-token": localStorage.getItem('adminToken') }
-          });
+      if (!confirm("Are you sure you want to delete selected tasks?")) return;
+      for (let idx of selectedTasks) {
+        const task = allTasks[idx];
+        try {
+          const id = encodeURIComponent(task.taskCode || task.id);
+          await authFetch(`/admin/tasks/${id}`, { method: 'DELETE' });
+        } catch (e) {
+          // continue
         }
-        selectedTasks.clear();
-        showToast("Selected tasks deleted.");
-        fetchTasks();
       }
+      selectedTasks.clear();
+      showToast("Selected tasks deleted.");
+      fetchTasks();
     }
 
     // Export tasks to CSV
@@ -270,9 +362,9 @@
         ...allTasks.map(t => [
           t.taskCode || t.id || "",
           t.username || t.user || "",
-          t.product && t.product.name ? t.product.name : "",
+          t.product && t.product.name ? t.product.name : (t.name || ""),
           t.status || "",
-          t.completedAt ? new Date(t.completedAt).toLocaleString() : (t.startedAt ? new Date(t.startedAt).toLocaleString() : "")
+          t.completedAt ? new Date(t.completedAt).toLocaleString() : (t.startedAt ? new Date(t.startedAt).toLocaleString() : (t.createdAt ? new Date(t.createdAt).toLocaleString() : ""))
         ])
       ].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
@@ -293,7 +385,11 @@
       setTimeout(() => { toast.className = "toast"; }, 3000);
     }
     function logout() {
-      localStorage.removeItem("adminToken");
+      try {
+        localStorage.removeItem('stacksAdminToken');
+        localStorage.removeItem('adminToken');
+        document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      } catch(e){}
       window.location.href = "/admin-panel/login.html";
     }
 
