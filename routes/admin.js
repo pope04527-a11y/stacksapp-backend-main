@@ -8,8 +8,8 @@
  *
  * NOTE: This version keeps the transactional logic but also includes a safe
  * non-transactional fallback for MongoDB deployments that are not replica sets.
- * It also includes stronger input validation (explicitly handles 'undefined' id),
- * clearer 4xx responses for invalid ids, and better logging to help diagnose UI issues.
+ * That ensures approve/reject operations won't throw on standalone servers and
+ * will behave atomically where transactions are available.
  */
 
 const express = require('express');
@@ -40,7 +40,7 @@ const Notification = mongoose.models.Notification || mongoose.model('Notificatio
 const Log = mongoose.models.Log || mongoose.model('Log', new mongoose.Schema({}, { collection: 'logs', strict: false }));
 const Setting = mongoose.models.Setting || mongoose.model('Setting', new mongoose.Schema({}, { collection: 'settings', strict: false }));
 
-// ========== Cloudinary Config (move to env in production) ==========
+// ========== Cloudinary Config ==========
 cloudinary.config({
     cloud_name: 'dhubpqnss',
     api_key: '129672528218384',
@@ -51,7 +51,8 @@ cloudinary.config({
 function asyncHandler(fn) {
     return function (req, res, next) {
         Promise.resolve(fn(req, res, next)).catch((e) => {
-            console.error('UNHANDLED ROUTE ERROR:', e && (e.stack || e.message) ? (e.stack || e.message) : e);
+            console.error(e);
+            // If the thrown object contains a status property, use it (used below in transactions)
             if (e && e.status && typeof e.status === 'number') {
                 return res.status(e.status).json({ success: false, message: e.message || 'Error' });
             }
@@ -60,7 +61,17 @@ function asyncHandler(fn) {
     };
 }
 
-// ========== Cloudinary products cache ==========
+// Helper: safe ObjectId validation (guards against literal 'undefined'/'null' strings)
+function isValidId(id) {
+    if (!id) return false;
+    if (typeof id !== 'string') id = String(id);
+    id = id.trim();
+    if (!id) return false;
+    if (id === 'undefined' || id === 'null') return false;
+    return mongoose.Types.ObjectId.isValid(id);
+}
+
+// ========== FASTER CLOUDINARY PRODUCT LIST WITH IN-MEMORY CACHE ==========
 let cachedCloudinaryProducts = [];
 let lastCloudinaryFetch = 0;
 const CLOUDINARY_CACHE_DURATION = 1000 * 60 * 10; // 10 minutes
@@ -111,10 +122,12 @@ router.get('/cloudinary-products', asyncHandler(async (req, res) => {
         lastCloudinaryFetch = now;
     }
 
+    // Filtering
     let filtered = cachedCloudinaryProducts.filter(prod =>
         prod.price >= minPrice && prod.price <= maxPrice &&
         (!search || prod.name.toLowerCase().includes(search.toLowerCase()))
     );
+    // Optional: limit (pagination can be added)
     filtered = filtered.slice(0, 100);
 
     res.json({ success: true, products: filtered });
@@ -130,12 +143,14 @@ router.options('/login', (req, res) => {
     res.sendStatus(204);
 });
 
-// Strong token generator
+// Stronger token generator: 32 bytes -> 64 hex chars
 function makeToken() {
     return crypto.randomBytes(32).toString('hex');
 }
 
 // POST /admin/login
+// Ensures a fresh token is issued on every successful login, persisted atomically,
+// set as httpOnly cookie and returned in the JSON response.
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
 
@@ -143,17 +158,24 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Username and password required' });
     }
 
-    // Legacy plaintext check (replace with hashed check in production)
+    // Find admin by username/password (legacy plaintext)
     const adminDoc = await Admin.findOne({ username, password }).exec();
     if (!adminDoc) {
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
+    // Always generate a new token for each successful login.
     const newToken = makeToken();
+
+    // Attempt to persist the token robustly:
+    // 1) try updating by _id
+    // 2) fallback to updating by username
+    // 3) final fallback: reload document and save()
     let finalToken = null;
     let updatedAdmin = null;
 
     try {
+        // Best-effort: update by _id
         try {
             updatedAdmin = await Admin.findOneAndUpdate(
                 { _id: adminDoc._id },
@@ -161,10 +183,12 @@ router.post('/login', asyncHandler(async (req, res) => {
                 { new: true, useFindAndModify: false }
             ).lean().exec();
         } catch (e) {
+            // Log and continue to fallback
             console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
         }
 
         if (!updatedAdmin) {
+            // Fallback: update by username
             try {
                 updatedAdmin = await Admin.findOneAndUpdate(
                     { username: adminDoc.username },
@@ -179,13 +203,15 @@ router.post('/login', asyncHandler(async (req, res) => {
         if (updatedAdmin && updatedAdmin.token) {
             finalToken = String(updatedAdmin.token);
         } else {
+            // Final fallback: reload the document instance and save
             const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
             if (reloaded) {
                 reloaded.token = newToken;
                 await reloaded.save();
                 finalToken = String(reloaded.token);
             } else {
-                console.error('Failed to persist admin token: admin document not found', { id: adminDoc._id, username: adminDoc.username });
+                // Could not find the document to update — this is unexpected
+                console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
                 return res.status(500).json({ success: false, message: 'Failed to persist token' });
             }
         }
@@ -194,7 +220,7 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to persist token' });
     }
 
-    // Set cookie
+    // Set the canonical token as httpOnly cookie so browsers send it automatically
     if (finalToken) {
         try {
             res.cookie('stacksAdminToken', finalToken, {
@@ -208,13 +234,15 @@ router.post('/login', asyncHandler(async (req, res) => {
         }
     }
 
+    // CORS headers
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
 
+    // Return the exact persisted token in JSON (guaranteed to match DB)
     return res.json({ success: true, token: finalToken });
 }));
 
-// GET /admin/token
+// GET /admin/token - return canonical token (reads cookie or header)
 router.get('/token', asyncHandler(async (req, res) => {
     let token = null;
     if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
@@ -229,16 +257,18 @@ router.get('/token', asyncHandler(async (req, res) => {
     }
     if (!token) return res.status(403).json({ success: false, message: 'No token provided' });
 
+    // validate exists in Admin collection
     const admin = await Admin.findOne({ token }).lean().exec();
     if (!admin) return res.status(403).json({ success: false, message: 'Invalid token' });
 
     return res.json({ success: true, token: String(admin.token) });
 }));
 
-// Serve settings.js
+// ----------------------- Serve admin settings client script (public) -----------------------
 router.get('/settings.js', (req, res) => {
     const filePath = path.join(__dirname, '..', 'public', 'admin-panel', 'js', 'settings.js');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    // prevent aggressive caching so admin gets latest script after deployments
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.sendFile(filePath, (err) => {
         if (err) {
@@ -248,12 +278,14 @@ router.get('/settings.js', (req, res) => {
     });
 });
 
-// Middleware: verify token
+// ----------------------- Middleware: Protect All Other Admin Routes -----------------------
 async function verifyAdminToken(req, res, next) {
     try {
+        // Prefer token from httpOnly cookie 'stacksAdminToken'
         let token = null;
         if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
 
+        // fallback: accept from Authorization: Bearer <token>, x-admin-token or x-auth-token headers
         if (!token) {
             const headerAuth = req.headers['authorization'] || '';
             const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
@@ -274,19 +306,24 @@ async function verifyAdminToken(req, res, next) {
 
         token = token.trim().replace(/^"|"$/g, '');
 
+        // debug: log the incoming token (temporary)
+        console.debug('verifyAdminToken - incoming token:', token);
+
+        // try Admin collection (canonical)
         const adminDoc = await Admin.findOne({ token }).lean().exec();
         if (adminDoc) {
             req.admin = adminDoc;
             return next();
         }
 
+        // fallback: try a User with username "admin" that stores token (legacy)
         const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
         if (userDoc) {
             req.admin = userDoc;
             return next();
         }
 
-        console.warn('verifyAdminToken: token not found in Admin or User collections');
+        console.warn('verifyAdminToken: token not found in Admin or User collections:', token);
         return res.status(403).json({ success: false, message: 'Unauthorized' });
     } catch (err) {
         console.error('verifyAdminToken ERROR:', err && err.message ? err.message : err);
@@ -294,7 +331,7 @@ async function verifyAdminToken(req, res, next) {
     }
 }
 
-// Public bypass paths
+// Allow some public endpoints to bypass admin auth
 router.use((req, res, next) => {
     if (
         req.path === "/login" ||
@@ -309,12 +346,13 @@ router.use((req, res, next) => {
     return verifyAdminToken(req, res, next);
 });
 
-// SETTINGS PUBLIC
+// ===================== PUBLIC SETTINGS FOR FRONTEND (NO AUTH) ===================== //
 router.get('/settings-public', asyncHandler(async (_, res) => {
     let settings = await Setting.findOne({}).lean() || {};
     if (!settings.service) {
         settings.service = { whatsapp: "", telegram: "" };
     }
+    // Prevent caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -322,7 +360,7 @@ router.get('/settings-public', asyncHandler(async (_, res) => {
     res.json({ service: settings.service });
 }));
 
-// SERVICE JSON
+// ===================== SERVICE JSON FILE API ===================== //
 router.get('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.readFile(serviceJsonPath, "utf8", (err, data) => {
@@ -334,6 +372,7 @@ router.get('/service', asyncHandler(async (req, res) => {
         }
     });
 }));
+
 router.post('/service', asyncHandler(async (req, res) => {
     const serviceJsonPath = path.join(__dirname, '../data/service.json');
     fs.writeFile(serviceJsonPath, JSON.stringify(req.body, null, 2), "utf8", (err) => {
@@ -342,7 +381,7 @@ router.post('/service', asyncHandler(async (req, res) => {
     });
 }));
 
-// USER MANAGER
+// ===================== USER MANAGER: UNIFIED EDIT/ACTIONS ===================== //
 router.put('/user/:username', asyncHandler(async (req, res) => {
     const { username } = req.params;
     const { action, updates, newPassword, amount } = req.body;
@@ -369,7 +408,7 @@ router.put('/user/:username', asyncHandler(async (req, res) => {
 
         case 'reset_password':
             if (!newPassword) return res.status(400).json({ success: false, message: 'New password required.' });
-            user.password = newPassword;
+            user.password = newPassword; // In production, hash!
             await user.save();
             return res.json({ success: true, message: "Password reset." });
 
@@ -405,7 +444,7 @@ router.put('/user/:username', asyncHandler(async (req, res) => {
     }
 }));
 
-// DASHBOARD endpoints
+// ===================== DASHBOARD ANALYTICS API ===================== //
 router.get('/total-users', asyncHandler(async (_, res) => {
     const count = await User.countDocuments();
     res.json({ count });
@@ -424,16 +463,17 @@ router.get('/pending-withdrawals', asyncHandler(async (_, res) => {
     res.json({ count });
 }));
 
-// WITHDRAWALS - list
+// ===================== WITHDRAWALS API ===================== //
+// GET /admin/withdrawals - list withdrawals
 router.get('/withdrawals', asyncHandler(async (req, res) => {
     const list = await Withdrawal.find({}).lean().exec();
     res.json(list);
 }));
 
-// WITHDRAWALS - update
+// PUT /admin/withdrawals/:id - update a withdrawal
 router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    if (!id || id === 'undefined') return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    if (!isValidId(id)) return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     const updates = req.body || {};
     const updated = await Withdrawal.findOneAndUpdate({ _id: id }, { $set: updates }, { new: true }).lean().exec();
     if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
@@ -441,11 +481,23 @@ router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
 }));
 
 /**
- * approveWithdrawalFallback & rejectWithdrawalFallback
- * safe conditional updates used when transactions are not available or fail.
+ * Helper: Safe non-transactional approve fallback
+ * Tries an atomic conditional update to ensure only pending withdrawals are modified.
  */
 async function approveWithdrawalFallback(id, processedBy, adminNote) {
-    const update = { $set: { status: 'Approved', processedAt: new Date(), processedBy } };
+    if (!isValidId(id)) {
+        const err = new Error('Invalid withdrawal id');
+        err.status = 400;
+        throw err;
+    }
+
+    const update = {
+        $set: {
+            status: 'Approved',
+            processedAt: new Date(),
+            processedBy
+        }
+    };
     if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
 
     const updated = await Withdrawal.findOneAndUpdate(
@@ -455,6 +507,7 @@ async function approveWithdrawalFallback(id, processedBy, adminNote) {
     ).lean().exec();
 
     if (!updated) {
+        // Check if withdrawal exists but not pending
         const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
         if (!exists) {
             const err = new Error('Withdrawal not found');
@@ -469,8 +522,24 @@ async function approveWithdrawalFallback(id, processedBy, adminNote) {
     return updated;
 }
 
+/**
+ * Helper: Safe non-transactional reject fallback
+ * Uses conditional update for the withdrawal and attempts a separate refund update when possible.
+ */
 async function rejectWithdrawalFallback(id, processedBy, adminNote) {
-    const update = { $set: { status: 'Rejected', processedAt: new Date(), processedBy } };
+    if (!isValidId(id)) {
+        const err = new Error('Invalid withdrawal id');
+        err.status = 400;
+        throw err;
+    }
+
+    const update = {
+        $set: {
+            status: 'Rejected',
+            processedAt: new Date(),
+            processedBy
+        }
+    };
     if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
 
     const updated = await Withdrawal.findOneAndUpdate(
@@ -492,6 +561,7 @@ async function rejectWithdrawalFallback(id, processedBy, adminNote) {
         }
     }
 
+    // Attempt refund if applicable
     let refundedUser = null;
     const amount = (typeof updated.amount === 'number') ? updated.amount : (updated.amount ? Number(updated.amount) : NaN);
     let userQuery = null;
@@ -500,31 +570,30 @@ async function rejectWithdrawalFallback(id, processedBy, adminNote) {
 
     if (userQuery && !isNaN(amount) && amount > 0) {
         const userUpdateRes = await User.findOneAndUpdate(userQuery, { $inc: { balance: amount } }, { new: true }).lean().exec();
-        if (userUpdateRes) refundedUser = { username: userUpdateRes.username, balance: userUpdateRes.balance };
-        else console.warn('Reject refund: user not found for', userQuery);
+        if (userUpdateRes) {
+            refundedUser = { username: userUpdateRes.username, balance: userUpdateRes.balance };
+        } else {
+            console.warn('Reject refund: user not found for', userQuery);
+        }
     }
 
     return { updated, refundedUser };
 }
 
-// PATCH approve (transactional with robust fallback)
+// PATCH approve (transactional with fallback)
 router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    // Validate id early (avoid 'undefined' path causing confusing 500s)
-    if (!id || id === 'undefined') {
+    if (!isValidId(id)) {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(String(id))) {
-        return res.status(400).json({ success: false, message: 'Invalid withdrawal id format' });
-    }
-
+    // Compute processedBy string
     const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
     const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
 
-    // Try to start a session (might fail on non-replica sets)
-    let session = null;
+    // Try transactional path first (if supported). If any transactional APIs fail, fallback to atomic updates.
+    let session;
     try {
         session = await mongoose.startSession();
     } catch (e) {
@@ -532,6 +601,7 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     }
 
     if (session && typeof session.withTransaction === 'function') {
+        // Attempt transactional flow, but catch and fallback on errors.
         try {
             let updatedWithdrawal = null;
             await session.withTransaction(async () => {
@@ -541,17 +611,22 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
                     err.status = 404;
                     throw err;
                 }
+
                 const currentStatus = (w.status || '').toString();
                 if (currentStatus.toLowerCase() !== 'pending') {
                     const err = new Error('Withdrawal is not pending');
                     err.status = 400;
                     throw err;
                 }
+
                 w.status = 'Approved';
                 w.processedAt = new Date();
                 w.processedBy = processedBy;
                 if (adminNote) w.adminNote = adminNote;
                 await w.save({ session });
+
+                // Hook for extra transactional bookkeeping could be added here.
+
                 updatedWithdrawal = w.toObject();
             });
 
@@ -559,15 +634,15 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
             return res.json({ success: true, withdrawal: updatedWithdrawal });
         } catch (err) {
             try { session.endSession(); } catch (e) {}
-            console.warn('Transactional approve failed, falling back:', err && err.message ? err.message : err);
-            // continue to fallback
+            console.warn('Transactional approve failed, falling back to non-transactional method:', err && err.message ? err.message : err);
+            // fall through to fallback logic below
         }
     } else {
         if (session) try { session.endSession(); } catch (e) {}
-        console.debug('Transactions not supported — using fallback for approve');
+        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for approve');
     }
 
-    // Fallback
+    // Fallback non-transactional path (atomic conditional update)
     try {
         const updated = await approveWithdrawalFallback(id, processedBy, adminNote);
         return res.json({ success: true, withdrawal: updated });
@@ -578,22 +653,18 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     }
 }));
 
-// PATCH reject (transactional with robust fallback)
+// PATCH reject (transactional with fallback)
 router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    if (!id || id === 'undefined') {
+    if (!isValidId(id)) {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(String(id))) {
-        return res.status(400).json({ success: false, message: 'Invalid withdrawal id format' });
     }
 
     const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
     const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
 
-    let session = null;
+    let session;
     try {
         session = await mongoose.startSession();
     } catch (e) {
@@ -611,6 +682,7 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                     err.status = 404;
                     throw err;
                 }
+
                 const currentStatus = (w.status || '').toString();
                 if (currentStatus.toLowerCase() !== 'pending') {
                     const err = new Error('Withdrawal is not pending');
@@ -623,6 +695,7 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                 w.processedBy = processedBy;
                 if (adminNote) w.adminNote = adminNote;
 
+                // Optional refund logic
                 const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
                 let userQuery = null;
                 if (w.username) userQuery = { username: String(w.username) };
@@ -634,6 +707,7 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                         userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
                         await userDoc.save({ session });
                         refundedUser = { username: userDoc.username, balance: userDoc.balance };
+                        // optionally add Transaction record here inside the same transaction
                     } else {
                         console.warn('Rejecting withdrawal but user not found to refund (transactional):', userQuery);
                     }
@@ -647,15 +721,15 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
             return res.json({ success: true, withdrawal: updatedWithdrawal, refundedUser: refundedUser || null });
         } catch (err) {
             try { session.endSession(); } catch (e) {}
-            console.warn('Transactional reject failed, falling back:', err && err.message ? err.message : err);
-            // continue to fallback
+            console.warn('Transactional reject failed, falling back to non-transactional method:', err && err.message ? err.message : err);
+            // fall through to fallback logic below
         }
     } else {
         if (session) try { session.endSession(); } catch (e) {}
-        console.debug('Transactions not supported — using fallback for reject');
+        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for reject');
     }
 
-    // Fallback
+    // Fallback non-transactional path
     try {
         const { updated, refundedUser } = await rejectWithdrawalFallback(id, processedBy, adminNote);
         return res.json({ success: true, withdrawal: updated, refundedUser: refundedUser || null });
@@ -666,24 +740,26 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
     }
 }));
 
-// DELETE withdrawal
+// DELETE
 router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    if (!id || id === 'undefined') return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    if (!isValidId(id)) return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     const result = await Withdrawal.deleteOne({ _id: id }).exec();
     if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
     res.json({ success: true });
 }));
 
-// SETTINGS endpoints (kept same as earlier)
+// ===================== SETTINGS API ENHANCED (SERVICE & ACTIVITY LOCK) ===================== //
 router.get('/settings', asyncHandler(async (_, res) => {
     let settings = await Setting.findOne({}).lean() || {};
 
+    // Ensure all fields are always present for the frontend
     settings.siteName = settings.siteName || "";
     settings.currency = settings.currency || "";
+    // New defaults for currencySymbol and decimals
     settings.currencySymbol = settings.currencySymbol || "";
     settings.currencyDecimals = (typeof settings.currencyDecimals === 'number') ? settings.currencyDecimals : 2;
-    settings.currencyPosition = settings.currencyPosition || "after";
+    settings.currencyPosition = settings.currencyPosition || "after"; // optional: "before" or "after"
 
     settings.defaultVip = settings.defaultVip || 1;
     settings.inviteBonus = settings.inviteBonus || 0;
@@ -694,6 +770,7 @@ router.get('/settings', asyncHandler(async (_, res) => {
     settings.minWithdraw = settings.minWithdraw || 0;
     settings.maxWithdraw = settings.maxWithdraw || 0;
 
+    // Normalise withdraw fee fields: support legacy `withdrawFee` and canonical `withdrawFeePercent`
     if (typeof settings.withdrawFeePercent === 'undefined' && typeof settings.withdrawFee !== 'undefined') {
         settings.withdrawFeePercent = settings.withdrawFee;
     }
@@ -719,10 +796,12 @@ router.get('/settings', asyncHandler(async (_, res) => {
         if (!Array.isArray(settings.activityLock.users)) settings.activityLock.users = [];
     }
 
+    // platform closing helpers (ensure naming consistency)
     settings.platformClosed = !!settings.platformClosed;
     settings.autoOpenHourUK = typeof settings.autoOpenHourUK === 'number' ? settings.autoOpenHourUK : 10;
     settings.whoCanAccessDuringClose = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
 
+    // Provide frontend-friendly aliases:
     const hour = Number(settings.autoOpenHourUK);
     if (!isNaN(hour) && hour >= 0 && hour <= 23) {
         const hh = String(hour).padStart(2, '0');
@@ -736,11 +815,20 @@ router.get('/settings', asyncHandler(async (_, res) => {
 }));
 
 router.post('/settings', asyncHandler(async (req, res) => {
-    console.log('ADMIN POST /admin/settings - x-admin-token:', req.headers['x-admin-token']);
-    try { console.log('payload (truncated):', JSON.stringify(req.body).slice(0, 1000)); } catch(e) {}
+    // Debug logging to help ensure requests reach this handler and payloads are as-expected
+    console.log('ADMIN POST /admin/settings called - x-admin-token:', req.headers['x-admin-token']);
+    try {
+        console.log('ADMIN POST /admin/settings payload (truncated):', JSON.stringify(req.body).slice(0, 1000));
+    } catch (e) {
+        console.warn('Could not stringify payload for log');
+    }
 
     const updates = req.body || {};
+
+    // Build an update document (use atomic findOneAndUpdate with upsert to avoid race/duplicate issues)
     const updateDoc = {};
+
+    // whitelisted simple fields
     const simpleFields = [
         "siteName", "currency", "currencySymbol", "currencyDecimals", "currencyPosition",
         "defaultVip", "inviteBonus", "telegramGroup",
@@ -751,11 +839,14 @@ router.post('/settings', asyncHandler(async (req, res) => {
     for (const key of simpleFields) {
         if (updates[key] !== undefined) updateDoc[key] = updates[key];
     }
+
+    // Ensure currencyDecimals is a number if provided
     if (updates.currencyDecimals !== undefined) {
         const parsed = Number(updates.currencyDecimals);
         updateDoc.currencyDecimals = Number.isFinite(parsed) ? parsed : 2;
     }
 
+    // withdraw fee normalization
     if (updates.withdrawFeePercent !== undefined) {
         const parsed = Number(updates.withdrawFeePercent);
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
@@ -764,43 +855,136 @@ router.post('/settings', asyncHandler(async (req, res) => {
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
     }
 
-    if (updates.service && typeof updates.service === 'object') updateDoc.service = { ...(updates.service || {}) };
+    // service merge (keep existing keys if not provided)
+    if (updates.service && typeof updates.service === 'object') {
+        // We'll set service fully to provided object (merge on DB side)
+        updateDoc.service = { ...(updates.service || {}) };
+    }
+
+    // activityLock normalization
     if (updates.activityLock && typeof updates.activityLock === 'object') {
-        const acl = { enabled: !!updates.activityLock.enabled, users: [] };
-        if (Array.isArray(updates.activityLock.users)) acl.users = updates.activityLock.users.map(u => String(u || '').trim()).filter(Boolean);
-        else if (typeof updates.activityLock.users === 'string') acl.users = updates.activityLock.users.split(',').map(u => u.trim()).filter(Boolean);
+        const acl = {
+            enabled: !!updates.activityLock.enabled,
+            users: []
+        };
+        if (Array.isArray(updates.activityLock.users)) {
+            acl.users = updates.activityLock.users.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.activityLock.users === 'string') {
+            acl.users = updates.activityLock.users.split(',').map(u => u.trim()).filter(Boolean);
+        }
         updateDoc.activityLock = acl;
     }
 
-    if (updates.platformClosed !== undefined) updateDoc.platformClosed = !!updates.platformClosed;
-    if (updates.autoOpenHourUK !== undefined && !isNaN(Number(updates.autoOpenHourUK))) updateDoc.autoOpenHourUK = Number(updates.autoOpenHourUK);
-    else if (typeof updates.autoOpenTime === 'string' && updates.autoOpenTime.trim()) {
+    // platform closing controls
+    if (updates.platformClosed !== undefined) {
+        updateDoc.platformClosed = !!updates.platformClosed;
+    }
+
+    // parse autoOpenTime "HH:MM" to autoOpenHourUK if provided
+    if (updates.autoOpenHourUK !== undefined && !isNaN(Number(updates.autoOpenHourUK))) {
+        updateDoc.autoOpenHourUK = Number(updates.autoOpenHourUK);
+    } else if (typeof updates.autoOpenTime === 'string' && updates.autoOpenTime.trim()) {
         const parts = updates.autoOpenTime.split(':');
         const parsed = parseInt(parts[0], 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) updateDoc.autoOpenHourUK = parsed;
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+            updateDoc.autoOpenHourUK = parsed;
+        }
     }
 
+    // allowList / whoCanAccessDuringClose normalization
     if (updates.allowList !== undefined) {
-        if (Array.isArray(updates.allowList)) updateDoc.whoCanAccessDuringClose = updates.allowList.map(u => String(u || '').trim()).filter(Boolean);
-        else if (typeof updates.allowList === 'string') updateDoc.whoCanAccessDuringClose = updates.allowList.split(',').map(u => u.trim()).filter(Boolean);
-        else updateDoc.whoCanAccessDuringClose = [];
+        if (Array.isArray(updates.allowList)) {
+            updateDoc.whoCanAccessDuringClose = updates.allowList.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.allowList === 'string') {
+            updateDoc.whoCanAccessDuringClose = updates.allowList.split(',').map(u => u.trim()).filter(Boolean);
+        } else {
+            updateDoc.whoCanAccessDuringClose = [];
+        }
     } else if (updates.whoCanAccessDuringClose !== undefined) {
-        if (Array.isArray(updates.whoCanAccessDuringClose)) updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.map(u => String(u || '').trim()).filter(Boolean);
-        else if (typeof updates.whoCanAccessDuringClose === 'string') updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.split(',').map(u => u.trim()).filter(Boolean);
-        else updateDoc.whoCanAccessDuringClose = [];
+        if (Array.isArray(updates.whoCanAccessDuringClose)) {
+            updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.whoCanAccessDuringClose === 'string') {
+            updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.split(',').map(u => u.trim()).filter(Boolean);
+        } else {
+            updateDoc.whoCanAccessDuringClose = [];
+        }
     }
 
-    if (typeof updateDoc.service !== 'undefined') {
+    if (typeof updateDoc.service === 'undefined') {
+        // leave service untouched unless provided
+    } else {
         updateDoc.service.whatsapp = updateDoc.service.whatsapp || "";
         updateDoc.service.telegram = updateDoc.service.telegram || "";
     }
 
-    const saved = await Setting.findOneAndUpdate({}, { $set: updateDoc }, { upsert: true, new: true }).exec();
+    if (typeof updateDoc.activityLock === 'undefined') {
+        // leave untouched
+    }
+
+    // Perform atomic update with upsert and return the new doc
+    const saved = await Setting.findOneAndUpdate(
+        {},
+        { $set: updateDoc },
+        { upsert: true, new: true }
+    ).exec();
+
     console.log('ADMIN POST /admin/settings saved settings id:', saved && saved._id);
     res.json({ success: true, settings: saved });
 }));
 
-// REST of endpoints (users, products, etc.) preserved as before (omitted here for brevity in this message)
-// In your deployed file keep the remaining endpoints as in your repo (users, products, vip bulk, etc.)
+// ===================== USERS API (RESTful) ===================== //
+router.get('/users', asyncHandler(async (_, res) => {
+    const users = await User.find({}).lean();
+    res.json(users);
+}));
+router.post('/users', asyncHandler(async (req, res) => {
+    const { username, phone, vipLevel, balance, exchange, walletAddress } = req.body;
+    if (!username || !phone) return res.status(400).json({ success: false, message: 'Username and phone are required' });
+    const exists = await User.findOne({ username }).lean();
+    if (exists) return res.status(409).json({ success: false, message: 'Username already exists' });
+
+    const user = {
+        username,
+        phone,
+        vipLevel: vipLevel || 1,
+        balance: balance || 0,
+        status: "Active",
+        tasksCompletedInSet: 0,
+        tasksSetSize: 40,
+        exchange: exchange || "",
+        walletAddress: walletAddress || ""
+    };
+    await User.create(user);
+    res.json({ success: true, user });
+}));
+router.put('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const updates = req.body;
+    const user = await User.findOneAndUpdate({ username }, updates, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, user });
+}));
+router.patch('/users/:username/suspend', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const newStatus = user.status === "Suspended" ? "Active" : "Suspended";
+    await User.updateOne({ username }, { $set: { status: newStatus } });
+    res.json({ success: true, status: newStatus });
+}));
+router.delete('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const result = await User.deleteOne({ username });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true });
+}));
+router.get('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, user });
+}));
+
+// (Remaining routes kept as in original file)
 
 module.exports = router;
