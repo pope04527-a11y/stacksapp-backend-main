@@ -47,6 +47,10 @@ function asyncHandler(fn) {
     return function (req, res, next) {
         Promise.resolve(fn(req, res, next)).catch((e) => {
             console.error(e);
+            // If the thrown object contains a status property, use it (used below in transactions)
+            if (e && e.status && typeof e.status === 'number') {
+                return res.status(e.status).json({ success: false, message: e.message || 'Error' });
+            }
             res.status(500).json({ success: false, message: e.message || 'Server error' });
         });
     };
@@ -460,28 +464,145 @@ router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
     res.json({ success: true, withdrawal: updated });
 }));
 
-// PATCH approve
+// PATCH approve (transactional)
+// Uses a mongoose transaction to atomically verify and update the withdrawal.
+// Keeps changes minimal: marks status, processedAt, processedBy and ensures only pending withdrawals can be approved.
 router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const updated = await Withdrawal.findOneAndUpdate(
-        { _id: id },
-        { $set: { status: 'Approved', processedAt: new Date() } },
-        { new: true }
-    ).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    res.json({ success: true, withdrawal: updated });
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    }
+
+    const session = await mongoose.startSession();
+    let updatedWithdrawal = null;
+
+    try {
+        await session.withTransaction(async () => {
+            // Load withdrawal inside session for consistent read/write
+            const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
+            if (!w) {
+                const err = new Error('Withdrawal not found');
+                err.status = 404;
+                throw err;
+            }
+
+            // Only allow approving if currently Pending
+            const currentStatus = (w.status || '').toString();
+            if (currentStatus.toLowerCase() !== 'pending') {
+                const err = new Error('Withdrawal is not pending');
+                err.status = 400;
+                throw err;
+            }
+
+            // Mark as approved
+            w.status = 'Approved';
+            w.processedAt = new Date();
+            w.processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
+            // Optionally record admin note if provided
+            if (req.body && typeof req.body.adminNote === 'string') {
+                w.adminNote = req.body.adminNote;
+            }
+            await w.save({ session });
+
+            // If there's any post-approval bookkeeping (e.g., creating transaction records),
+            // that should be added here inside the same transaction. Leaving extensible hook:
+            // Example (commented):
+            // await Transaction.create([{ userId: w.userId, type: 'withdrawal', amount: w.amount, meta: { withdrawalId: w._id } }], { session });
+
+            updatedWithdrawal = w.toObject();
+        });
+
+        session.endSession();
+        return res.json({ success: true, withdrawal: updatedWithdrawal });
+    } catch (err) {
+        try { session.endSession(); } catch (e) {}
+        if (err && err.status) {
+            return res.status(err.status).json({ success: false, message: err.message });
+        }
+        console.error('Error approving withdrawal:', err && err.stack ? err.stack : err);
+        return res.status(500).json({ success: false, message: 'Failed to approve withdrawal' });
+    }
 }));
 
-// PATCH reject
+// PATCH reject (transactional)
+// Marks withdrawal as Rejected. If the withdrawal included an amount and the user's balance
+// should be refunded on rejection, this handler attempts to credit the user inside the same transaction.
+// It is defensive: if no user is found the rejection still proceeds but is logged.
 router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const updated = await Withdrawal.findOneAndUpdate(
-        { _id: id },
-        { $set: { status: 'Rejected', processedAt: new Date() } },
-        { new: true }
-    ).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-    res.json({ success: true, withdrawal: updated });
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    }
+
+    const session = await mongoose.startSession();
+    let updatedWithdrawal = null;
+    let refundedUser = null;
+
+    try {
+        await session.withTransaction(async () => {
+            const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
+            if (!w) {
+                const err = new Error('Withdrawal not found');
+                err.status = 404;
+                throw err;
+            }
+
+            const currentStatus = (w.status || '').toString();
+            if (currentStatus.toLowerCase() !== 'pending') {
+                const err = new Error('Withdrawal is not pending');
+                err.status = 400;
+                throw err;
+            }
+
+            // Set rejection fields
+            w.status = 'Rejected';
+            w.processedAt = new Date();
+            w.processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
+            if (req.body && typeof req.body.adminNote === 'string') {
+                w.adminNote = req.body.adminNote;
+            }
+
+            // Optional refund logic: if withdrawal stores username or userId and amount
+            const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
+            let userQuery = null;
+            if (w.username) {
+                userQuery = { username: String(w.username) };
+            } else if (w.userId && mongoose.Types.ObjectId.isValid(String(w.userId))) {
+                userQuery = { _id: w.userId };
+            }
+
+            if (userQuery && !isNaN(amount) && amount > 0) {
+                // Attempt to credit user's balance back (idempotent inside transaction since status changed)
+                const userDoc = await User.findOne(userQuery).session(session).exec();
+                if (userDoc) {
+                    userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
+                    // Save user
+                    await userDoc.save({ session });
+                    refundedUser = { username: userDoc.username, balance: userDoc.balance };
+                    // Optionally record a transaction item for refund
+                    // await Transaction.create([{ userId: userDoc._id, type: 'refund', amount, meta: { withdrawalId: w._id } }], { session });
+                } else {
+                    // If the user isn't found, log but continue (we still reject the withdrawal)
+                    console.warn('Rejecting withdrawal but user not found to refund:', userQuery);
+                }
+            }
+
+            await w.save({ session });
+            updatedWithdrawal = w.toObject();
+        });
+
+        session.endSession();
+        return res.json({ success: true, withdrawal: updatedWithdrawal, refundedUser: refundedUser || null });
+    } catch (err) {
+        try { session.endSession(); } catch (e) {}
+        if (err && err.status) {
+            return res.status(err.status).json({ success: false, message: err.message });
+        }
+        console.error('Error rejecting withdrawal:', err && err.stack ? err.stack : err);
+        return res.status(500).json({ success: false, message: 'Failed to reject withdrawal' });
+    }
 }));
 
 // DELETE
