@@ -148,19 +148,57 @@ router.post('/login', asyncHandler(async (req, res) => {
     // Always generate a new token for each successful login.
     const newToken = makeToken();
 
-    // Atomically replace the token in DB and obtain the new document
-    const updatedAdmin = await Admin.findByIdAndUpdate(
-        adminDoc._id,
-        { $set: { token: newToken } },
-        { new: true, useFindAndModify: false }
-    ).lean().exec();
+    // Attempt to persist the token robustly:
+    // 1) try updating by _id
+    // 2) fallback to updating by username
+    // 3) final fallback: reload document and save()
+    let finalToken = null;
+    let updatedAdmin = null;
 
-    // For safety: if atomic update failed, fallback to setting and saving on the instance
-    let finalToken = (updatedAdmin && updatedAdmin.token) ? String(updatedAdmin.token) : null;
-    if (!finalToken) {
-        adminDoc.token = newToken;
-        await adminDoc.save();
-        finalToken = String(adminDoc.token);
+    try {
+        // Best-effort: update by _id
+        try {
+            updatedAdmin = await Admin.findOneAndUpdate(
+                { _id: adminDoc._id },
+                { $set: { token: newToken } },
+                { new: true, useFindAndModify: false }
+            ).lean().exec();
+        } catch (e) {
+            // Log and continue to fallback
+            console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
+        }
+
+        if (!updatedAdmin) {
+            // Fallback: update by username
+            try {
+                updatedAdmin = await Admin.findOneAndUpdate(
+                    { username: adminDoc.username },
+                    { $set: { token: newToken } },
+                    { new: true, useFindAndModify: false }
+                ).lean().exec();
+            } catch (e) {
+                console.warn('Admin token update by username failed:', e && e.message ? e.message : e);
+            }
+        }
+
+        if (updatedAdmin && updatedAdmin.token) {
+            finalToken = String(updatedAdmin.token);
+        } else {
+            // Final fallback: reload the document instance and save
+            const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
+            if (reloaded) {
+                reloaded.token = newToken;
+                await reloaded.save();
+                finalToken = String(reloaded.token);
+            } else {
+                // Could not find the document to update — this is unexpected
+                console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
+                return res.status(500).json({ success: false, message: 'Failed to persist token' });
+            }
+        }
+    } catch (err) {
+        console.error('Error persisting admin token:', err && err.stack ? err.stack : err);
+        return res.status(500).json({ success: false, message: 'Failed to persist token' });
     }
 
     // Set the canonical token as httpOnly cookie so browsers send it automatically
