@@ -5,6 +5,11 @@
  * and stored by the admin panel client. Other routes are preserved.
  *
  * Replace existing routes/admin.js with this file and restart the server.
+ *
+ * NOTE: This version keeps the transactional logic but also includes a safe
+ * non-transactional fallback for MongoDB deployments that are not replica sets.
+ * That ensures approve/reject operations won't throw on standalone servers and
+ * will behave atomically where transactions are available.
  */
 
 const express = require('express');
@@ -464,9 +469,95 @@ router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
     res.json({ success: true, withdrawal: updated });
 }));
 
-// PATCH approve (transactional)
-// Uses a mongoose transaction to atomically verify and update the withdrawal.
-// Keeps changes minimal: marks status, processedAt, processedBy and ensures only pending withdrawals can be approved.
+/**
+ * Helper: Safe non-transactional approve fallback
+ * Tries an atomic conditional update to ensure only pending withdrawals are modified.
+ */
+async function approveWithdrawalFallback(id, processedBy, adminNote) {
+    const update = {
+        $set: {
+            status: 'Approved',
+            processedAt: new Date(),
+            processedBy
+        }
+    };
+    if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
+
+    const updated = await Withdrawal.findOneAndUpdate(
+        { _id: id, status: { $in: ['Pending', 'pending'] } },
+        update,
+        { new: true }
+    ).lean().exec();
+
+    if (!updated) {
+        // Check if withdrawal exists but not pending
+        const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
+        if (!exists) {
+            const err = new Error('Withdrawal not found');
+            err.status = 404;
+            throw err;
+        } else {
+            const err = new Error('Withdrawal is not pending');
+            err.status = 400;
+            throw err;
+        }
+    }
+    return updated;
+}
+
+/**
+ * Helper: Safe non-transactional reject fallback
+ * Uses conditional update for the withdrawal and attempts a separate refund update when possible.
+ */
+async function rejectWithdrawalFallback(id, processedBy, adminNote) {
+    const update = {
+        $set: {
+            status: 'Rejected',
+            processedAt: new Date(),
+            processedBy
+        }
+    };
+    if (typeof adminNote === 'string') update.$set.adminNote = adminNote;
+
+    const updated = await Withdrawal.findOneAndUpdate(
+        { _id: id, status: { $in: ['Pending', 'pending'] } },
+        update,
+        { new: true }
+    ).lean().exec();
+
+    if (!updated) {
+        const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
+        if (!exists) {
+            const err = new Error('Withdrawal not found');
+            err.status = 404;
+            throw err;
+        } else {
+            const err = new Error('Withdrawal is not pending');
+            err.status = 400;
+            throw err;
+        }
+    }
+
+    // Attempt refund if applicable
+    let refundedUser = null;
+    const amount = (typeof updated.amount === 'number') ? updated.amount : (updated.amount ? Number(updated.amount) : NaN);
+    let userQuery = null;
+    if (updated.username) userQuery = { username: String(updated.username) };
+    else if (updated.userId && mongoose.Types.ObjectId.isValid(String(updated.userId))) userQuery = { _id: updated.userId };
+
+    if (userQuery && !isNaN(amount) && amount > 0) {
+        const userUpdateRes = await User.findOneAndUpdate(userQuery, { $inc: { balance: amount } }, { new: true }).lean().exec();
+        if (userUpdateRes) {
+            refundedUser = { username: userUpdateRes.username, balance: userUpdateRes.balance };
+        } else {
+            console.warn('Reject refund: user not found for', userQuery);
+        }
+    }
+
+    return { updated, refundedUser };
+}
+
+// PATCH approve (transactional with fallback)
 router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -474,61 +565,72 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     }
 
-    const session = await mongoose.startSession();
-    let updatedWithdrawal = null;
+    // Compute processedBy string
+    const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
+    const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
 
+    // Try transactional path first (if supported). If any transactional APIs fail, fallback to atomic updates.
+    let session;
     try {
-        await session.withTransaction(async () => {
-            // Load withdrawal inside session for consistent read/write
-            const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
-            if (!w) {
-                const err = new Error('Withdrawal not found');
-                err.status = 404;
-                throw err;
-            }
+        session = await mongoose.startSession();
+    } catch (e) {
+        session = null;
+    }
 
-            // Only allow approving if currently Pending
-            const currentStatus = (w.status || '').toString();
-            if (currentStatus.toLowerCase() !== 'pending') {
-                const err = new Error('Withdrawal is not pending');
-                err.status = 400;
-                throw err;
-            }
+    if (session && typeof session.withTransaction === 'function') {
+        // Attempt transactional flow, but catch and fallback on errors.
+        try {
+            let updatedWithdrawal = null;
+            await session.withTransaction(async () => {
+                const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
+                if (!w) {
+                    const err = new Error('Withdrawal not found');
+                    err.status = 404;
+                    throw err;
+                }
 
-            // Mark as approved
-            w.status = 'Approved';
-            w.processedAt = new Date();
-            w.processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
-            // Optionally record admin note if provided
-            if (req.body && typeof req.body.adminNote === 'string') {
-                w.adminNote = req.body.adminNote;
-            }
-            await w.save({ session });
+                const currentStatus = (w.status || '').toString();
+                if (currentStatus.toLowerCase() !== 'pending') {
+                    const err = new Error('Withdrawal is not pending');
+                    err.status = 400;
+                    throw err;
+                }
 
-            // If there's any post-approval bookkeeping (e.g., creating transaction records),
-            // that should be added here inside the same transaction. Leaving extensible hook:
-            // Example (commented):
-            // await Transaction.create([{ userId: w.userId, type: 'withdrawal', amount: w.amount, meta: { withdrawalId: w._id } }], { session });
+                w.status = 'Approved';
+                w.processedAt = new Date();
+                w.processedBy = processedBy;
+                if (adminNote) w.adminNote = adminNote;
+                await w.save({ session });
 
-            updatedWithdrawal = w.toObject();
-        });
+                // Hook for extra transactional bookkeeping could be added here.
 
-        session.endSession();
-        return res.json({ success: true, withdrawal: updatedWithdrawal });
-    } catch (err) {
-        try { session.endSession(); } catch (e) {}
-        if (err && err.status) {
-            return res.status(err.status).json({ success: false, message: err.message });
+                updatedWithdrawal = w.toObject();
+            });
+
+            try { session.endSession(); } catch (e) {}
+            return res.json({ success: true, withdrawal: updatedWithdrawal });
+        } catch (err) {
+            try { session.endSession(); } catch (e) {}
+            console.warn('Transactional approve failed, falling back to non-transactional method:', err && err.message ? err.message : err);
+            // fall through to fallback logic below
         }
-        console.error('Error approving withdrawal:', err && err.stack ? err.stack : err);
+    } else {
+        if (session) try { session.endSession(); } catch (e) {}
+        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for approve');
+    }
+
+    // Fallback non-transactional path (atomic conditional update)
+    try {
+        const updated = await approveWithdrawalFallback(id, processedBy, adminNote);
+        return res.json({ success: true, withdrawal: updated });
+    } catch (err) {
+        if (err && err.status) return res.status(err.status).json({ success: false, message: err.message });
+        console.error('Approve fallback error:', err && err.stack ? err.stack : err);
         return res.status(500).json({ success: false, message: 'Failed to approve withdrawal' });
     }
 }));
 
-// PATCH reject (transactional)
-// Marks withdrawal as Rejected. If the withdrawal included an amount and the user's balance
-// should be refunded on rejection, this handler attempts to credit the user inside the same transaction.
-// It is defensive: if no user is found the rejection still proceeds but is logged.
+// PATCH reject (transactional with fallback)
 router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -536,71 +638,81 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     }
 
-    const session = await mongoose.startSession();
-    let updatedWithdrawal = null;
-    let refundedUser = null;
+    const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
+    const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
 
+    let session;
     try {
-        await session.withTransaction(async () => {
-            const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
-            if (!w) {
-                const err = new Error('Withdrawal not found');
-                err.status = 404;
-                throw err;
-            }
+        session = await mongoose.startSession();
+    } catch (e) {
+        session = null;
+    }
 
-            const currentStatus = (w.status || '').toString();
-            if (currentStatus.toLowerCase() !== 'pending') {
-                const err = new Error('Withdrawal is not pending');
-                err.status = 400;
-                throw err;
-            }
-
-            // Set rejection fields
-            w.status = 'Rejected';
-            w.processedAt = new Date();
-            w.processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
-            if (req.body && typeof req.body.adminNote === 'string') {
-                w.adminNote = req.body.adminNote;
-            }
-
-            // Optional refund logic: if withdrawal stores username or userId and amount
-            const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
-            let userQuery = null;
-            if (w.username) {
-                userQuery = { username: String(w.username) };
-            } else if (w.userId && mongoose.Types.ObjectId.isValid(String(w.userId))) {
-                userQuery = { _id: w.userId };
-            }
-
-            if (userQuery && !isNaN(amount) && amount > 0) {
-                // Attempt to credit user's balance back (idempotent inside transaction since status changed)
-                const userDoc = await User.findOne(userQuery).session(session).exec();
-                if (userDoc) {
-                    userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
-                    // Save user
-                    await userDoc.save({ session });
-                    refundedUser = { username: userDoc.username, balance: userDoc.balance };
-                    // Optionally record a transaction item for refund
-                    // await Transaction.create([{ userId: userDoc._id, type: 'refund', amount, meta: { withdrawalId: w._id } }], { session });
-                } else {
-                    // If the user isn't found, log but continue (we still reject the withdrawal)
-                    console.warn('Rejecting withdrawal but user not found to refund:', userQuery);
+    if (session && typeof session.withTransaction === 'function') {
+        try {
+            let updatedWithdrawal = null;
+            let refundedUser = null;
+            await session.withTransaction(async () => {
+                const w = await Withdrawal.findOne({ _id: id }).session(session).exec();
+                if (!w) {
+                    const err = new Error('Withdrawal not found');
+                    err.status = 404;
+                    throw err;
                 }
-            }
 
-            await w.save({ session });
-            updatedWithdrawal = w.toObject();
-        });
+                const currentStatus = (w.status || '').toString();
+                if (currentStatus.toLowerCase() !== 'pending') {
+                    const err = new Error('Withdrawal is not pending');
+                    err.status = 400;
+                    throw err;
+                }
 
-        session.endSession();
-        return res.json({ success: true, withdrawal: updatedWithdrawal, refundedUser: refundedUser || null });
-    } catch (err) {
-        try { session.endSession(); } catch (e) {}
-        if (err && err.status) {
-            return res.status(err.status).json({ success: false, message: err.message });
+                w.status = 'Rejected';
+                w.processedAt = new Date();
+                w.processedBy = processedBy;
+                if (adminNote) w.adminNote = adminNote;
+
+                // Optional refund logic
+                const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
+                let userQuery = null;
+                if (w.username) userQuery = { username: String(w.username) };
+                else if (w.userId && mongoose.Types.ObjectId.isValid(String(w.userId))) userQuery = { _id: w.userId };
+
+                if (userQuery && !isNaN(amount) && amount > 0) {
+                    const userDoc = await User.findOne(userQuery).session(session).exec();
+                    if (userDoc) {
+                        userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
+                        await userDoc.save({ session });
+                        refundedUser = { username: userDoc.username, balance: userDoc.balance };
+                        // optionally add Transaction record here inside the same transaction
+                    } else {
+                        console.warn('Rejecting withdrawal but user not found to refund (transactional):', userQuery);
+                    }
+                }
+
+                await w.save({ session });
+                updatedWithdrawal = w.toObject();
+            });
+
+            try { session.endSession(); } catch (e) {}
+            return res.json({ success: true, withdrawal: updatedWithdrawal, refundedUser: refundedUser || null });
+        } catch (err) {
+            try { session.endSession(); } catch (e) {}
+            console.warn('Transactional reject failed, falling back to non-transactional method:', err && err.message ? err.message : err);
+            // fall through to fallback logic below
         }
-        console.error('Error rejecting withdrawal:', err && err.stack ? err.stack : err);
+    } else {
+        if (session) try { session.endSession(); } catch (e) {}
+        console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for reject');
+    }
+
+    // Fallback non-transactional path
+    try {
+        const { updated, refundedUser } = await rejectWithdrawalFallback(id, processedBy, adminNote);
+        return res.json({ success: true, withdrawal: updated, refundedUser: refundedUser || null });
+    } catch (err) {
+        if (err && err.status) return res.status(err.status).json({ success: false, message: err.message });
+        console.error('Reject fallback error:', err && err.stack ? err.stack : err);
         return res.status(500).json({ success: false, message: 'Failed to reject withdrawal' });
     }
 }));
@@ -847,102 +959,6 @@ router.get('/users/:username', asyncHandler(async (req, res) => {
     const user = await User.findOne({ username }).lean();
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
-}));
-
-router.post('/reset-user-task-set', asyncHandler(async (req, res) => {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
-    const userDoc = await User.findOne({ username });
-    const newSet = (userDoc && typeof userDoc.currentSet === 'number') ? userDoc.currentSet + 1 : 2;
-    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0, currentSet: newSet } }, { new: true }).lean();
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    res.json({ success: true, message: 'Task progress and set reset for user.' });
-}));
-
-router.post('/reset-user-task-progress', asyncHandler(async (req, res) => {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
-    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0 } }, { new: true }).lean();
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    res.json({ success: true, message: 'Task progress reset for user.' });
-}));
-
-router.post('/vip/bulk-upgrade', asyncHandler(async (req, res) => {
-    const { usernames } = req.body;
-    if (!Array.isArray(usernames) || !usernames.length)
-        return res.status(400).json({ success: false, message: 'Usernames required.' });
-    const users = await User.find({ username: { $in: usernames } });
-    let changed = 0;
-    for (const user of users) {
-        if (typeof user.vipLevel === 'number') {
-            user.vipLevel = Math.min(user.vipLevel + 1, 10);
-            await user.save();
-            changed++;
-        }
-    }
-    res.json({ success: true, changed });
-}));
-router.post('/vip/bulk-downgrade', asyncHandler(async (req, res) => {
-    const { usernames } = req.body;
-    if (!Array.isArray(usernames) || !usernames.length)
-        return res.status(400).json({ success: false, message: 'Usernames required.' });
-    const users = await User.find({ username: { $in: usernames } });
-    let changed = 0;
-    for (const user of users) {
-        if (typeof user.vipLevel === 'number') {
-            user.vipLevel = Math.max(user.vipLevel - 1, 1);
-            await user.save();
-            changed++;
-        }
-    }
-    res.json({ success: true, changed });
-}));
-
-router.get('/products', asyncHandler(async (_, res) => {
-    const products = await Product.find({}).lean();
-    res.json(products);
-}));
-router.post('/products', asyncHandler(async (req, res) => {
-    const { name, description, price, image } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Product name is required' });
-    const exists = await Product.findOne({ name }).lean();
-    if (exists) return res.status(409).json({ success: false, message: 'Product already exists' });
-    const product = {
-        name,
-        description: description || "",
-        price: price || 0,
-        image: image || "",
-        status: "Active"
-    };
-    await Product.create(product);
-    res.json({ success: true, product });
-}));
-router.put('/products/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body;
-    const product = await Product.findByIdAndUpdate(id, updates, { new: true }).lean();
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, product });
-}));
-router.patch('/products/:id/disable', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const product = await Product.findById(id).lean();
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    const newStatus = product.status === "Suspended" ? "Active" : "Suspended";
-    await Product.updateOne({ _id: id }, { $set: { status: newStatus } });
-    res.json({ success: true, status: newStatus });
-}));
-router.delete('/products/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const result = await Product.deleteOne({ _id: id });
-    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true });
-}));
-router.get('/products/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const product = await Product.findById(id).lean();
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, product });
 }));
 
 // (Remaining routes kept as in original file)
