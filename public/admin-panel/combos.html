@@ -178,13 +178,36 @@
     let productsList = [];
     let lastPriceFilter = {min: "", max: ""};
 
+    // Safe fetchCombos: treat 404 as "no combos yet" (do not logout), handle 401/403 as unauthorized
     async function fetchCombos() {
       try {
-        const res = await authFetch('/admin/combos');
-        if (!res.ok) throw new Error('Unauthorized');
+        const fetcher = (typeof authFetch === 'function') ? authFetch : async (u, o) => fetch(u, Object.assign({ credentials: 'include' }, o));
+        const res = await fetcher('/admin/combos');
+
+        // If endpoint not implemented yet, show empty list and do NOT logout
+        if (res.status === 404) {
+          allCombos = [];
+          renderCombos(allCombos);
+          return;
+        }
+
+        // If unauthorized, handle normally (logout)
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Unauthorized');
+        }
+
+        if (!res.ok) {
+          // other errors: show message and don't force logout
+          console.error('Failed to fetch combos', res.status);
+          allCombos = [];
+          renderCombos(allCombos);
+          return;
+        }
+
         allCombos = await res.json();
         renderCombos(allCombos);
       } catch (err) {
+        console.error('fetchCombos error:', err);
         alert("Session expired or unauthorized. Please login again.");
         logout();
       }
