@@ -9,12 +9,76 @@
 </head>
 <body>
   <script>
-    // Redirect to login if token missing
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      alert("Access denied. Please login.");
-      window.location.href = "/admin-panel/login.html";
+  (function(){
+    // Inline admin auth helper (drop into each HTML admin page)
+    function getToken(){
+      return localStorage.getItem('stacksAdminToken') || localStorage.getItem('adminToken') || null;
     }
+
+    function requireAuth(){
+      const t = getToken();
+      if (!t) {
+        alert('Access denied. Please login.');
+        window.location.href = '/admin-panel/login.html';
+      }
+      return t;
+    }
+
+    async function authFetch(url, opts){
+      opts = Object.assign({}, opts || {});
+      opts.headers = Object.assign({}, opts.headers || {});
+
+      const token = getToken();
+      if (token) {
+        opts.headers['x-admin-token'] = token;
+        if (!opts.headers['Authorization'] && !opts.headers['authorization']) {
+          opts.headers['Authorization'] = 'Bearer ' + token;
+        }
+      }
+
+      // Ensure the httpOnly cookie (if set by server) is sent as well
+      opts.credentials = 'include';
+
+      // If sending body and no content-type set, default to JSON
+      if (opts.body && !opts.headers['Content-Type'] && !(opts.body instanceof FormData)) {
+        opts.headers['Content-Type'] = 'application/json';
+      }
+
+      let res;
+      try {
+        res = await fetch(url, opts);
+      } catch (err) {
+        // network error -> bubble up
+        throw err;
+      }
+
+      // Central handling of expired/unauthorized sessions
+      if (res.status === 401 || res.status === 403) {
+        // Clear client-side token(s) to force login
+        try {
+          localStorage.removeItem('stacksAdminToken');
+          localStorage.removeItem('adminToken');
+          // expire convenience cookie if present
+          document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        } catch(e){/*ignore*/}
+        // Redirect to login
+        window.location.href = '/admin-panel/login.html';
+        const err = new Error('Unauthorized');
+        err.status = res.status;
+        throw err;
+      }
+
+      return res;
+    }
+
+    // expose small API
+    window.requireAuth = requireAuth;
+    window.authFetch = authFetch;
+    window.getAdminToken = getToken;
+
+    // Immediately require auth when script loads (same behavior as your users.html top-check)
+    requireAuth();
+  })();
   </script>
 
   <div class="main-content" id="mainContent">
@@ -85,9 +149,7 @@
     // Fetch all withdrawals from API
     async function fetchWithdrawals() {
       try {
-        const res = await fetch('/admin/withdrawals', {
-          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
-        });
+        const res = await authFetch('/admin/withdrawals');
         if (!res.ok) throw new Error('Unauthorized');
         allWithdrawals = await res.json();
         renderWithdrawals(allWithdrawals);
@@ -150,23 +212,25 @@
     // Approve pending withdrawal
     async function approveWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
-      await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/approve`, {
-        method: 'PATCH',
-        headers: { "x-admin-token": localStorage.getItem('adminToken') }
-      });
-      showToast("Withdrawal approved.");
-      fetchWithdrawals();
+      try {
+        await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/approve`, { method: 'PATCH' });
+        showToast("Withdrawal approved.");
+        fetchWithdrawals();
+      } catch (e) {
+        showToast("Failed to approve withdrawal.");
+      }
     }
 
     // Reject pending withdrawal
     async function rejectWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
-      await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/reject`, {
-        method: 'PATCH',
-        headers: { "x-admin-token": localStorage.getItem('adminToken') }
-      });
-      showToast("Withdrawal rejected.");
-      fetchWithdrawals();
+      try {
+        await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/reject`, { method: 'PATCH' });
+        showToast("Withdrawal rejected.");
+        fetchWithdrawals();
+      } catch (e) {
+        showToast("Failed to reject withdrawal.");
+      }
     }
 
     // Select/deselect withdrawal for bulk actions
@@ -217,17 +281,17 @@
       const status = document.getElementById("modalStatus").value;
       if (editingWithdrawalIndex !== null) {
         const wdl = allWithdrawals[editingWithdrawalIndex];
-        await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, {
-          method: 'PUT',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ status })
-        });
-        showToast("Withdrawal updated!");
-        closeWithdrawalModal();
-        fetchWithdrawals();
+        try {
+          await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+          });
+          showToast("Withdrawal updated!");
+          closeWithdrawalModal();
+          fetchWithdrawals();
+        } catch (e) {
+          showToast("Failed to update withdrawal.");
+        }
       }
     };
 
@@ -235,12 +299,13 @@
     async function deleteWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       if (confirm("Are you sure you want to delete this withdrawal request?")) {
-        await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, {
-          method: 'DELETE',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
-        showToast("Withdrawal deleted.");
-        fetchWithdrawals();
+        try {
+          await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, { method: 'DELETE' });
+          showToast("Withdrawal deleted.");
+          fetchWithdrawals();
+        } catch (e) {
+          showToast("Failed to delete withdrawal.");
+        }
       }
     }
 
@@ -248,24 +313,26 @@
     async function bulkApproveWithdrawals() {
       for (let idx of selectedWithdrawals) {
         const wdl = allWithdrawals[idx];
-        await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/approve`, {
-          method: 'PATCH',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
+        try {
+          await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/approve`, { method: 'PATCH' });
+        } catch {
+          // continue, tallying/final message not required
+        }
       }
-      showToast("Selected withdrawals approved.");
+      showToast("Selected withdrawals processed (approve).");
       fetchWithdrawals();
       selectedWithdrawals.clear();
     }
     async function bulkRejectWithdrawals() {
       for (let idx of selectedWithdrawals) {
         const wdl = allWithdrawals[idx];
-        await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/reject`, {
-          method: 'PATCH',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
+        try {
+          await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}/reject`, { method: 'PATCH' });
+        } catch {
+          // continue
+        }
       }
-      showToast("Selected withdrawals rejected.");
+      showToast("Selected withdrawals processed (reject).");
       fetchWithdrawals();
       selectedWithdrawals.clear();
     }
@@ -273,10 +340,11 @@
       if (confirm("Are you sure you want to delete selected withdrawals?")) {
         for (let idx of selectedWithdrawals) {
           const wdl = allWithdrawals[idx];
-          await fetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, {
-            method: 'DELETE',
-            headers: { "x-admin-token": localStorage.getItem('adminToken') }
-          });
+          try {
+            await authFetch(`/admin/withdrawals/${encodeURIComponent(wdl.id)}`, { method: 'DELETE' });
+          } catch {
+            // continue
+          }
         }
         selectedWithdrawals.clear();
         showToast("Selected withdrawals deleted.");
@@ -310,7 +378,11 @@
       setTimeout(() => { toast.className = "toast"; }, 3000);
     }
     function logout() {
-      localStorage.removeItem("adminToken");
+      try {
+        localStorage.removeItem('stacksAdminToken');
+        localStorage.removeItem('adminToken');
+        document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      } catch(e){}
       window.location.href = "/admin-panel/login.html";
     }
 
