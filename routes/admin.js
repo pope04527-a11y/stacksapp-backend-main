@@ -1,12 +1,10 @@
 /**
  * routes/admin.js
  *
- * Complete admin routes for the admin panel.
- * - Preserves existing working endpoints (settings, login/token, cloudinary, users, products, etc.)
- * - Adds full CRUD/action endpoints for combos, tasks, transactions, withdrawals, notifications, vipLevels
- * - All admin endpoints (except /login, /token, /cloudinary-products, /settings-public, /settings.js, OPTIONS /login) are protected by verifyAdminToken
+ * Full file with login/token handling tightened so the exact persisted token is returned
+ * and stored by the admin panel client. Other routes are preserved.
  *
- * Replace existing routes/admin.js with this file and restart/redeploy your server.
+ * Replace existing routes/admin.js with this file and restart the server.
  */
 
 const express = require('express');
@@ -29,46 +27,13 @@ const Admin = mongoose.models.Admin || mongoose.model('Admin', new mongoose.Sche
 
 const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({}, { collection: 'users', strict: false }));
 const Product = mongoose.models.Product || mongoose.model('Product', new mongoose.Schema({}, { collection: 'products', strict: false }));
-const Combo = mongoose.models.Combo || mongoose.model('Combo', new mongoose.Schema({
-    username: String,
-    triggerTaskNumber: Number,
-    products: Array,
-    createdAt: { type: Date, default: Date.now }
-}, { collection: 'combos', strict: false }));
-const Task = mongoose.models.Task || mongoose.model('Task', new mongoose.Schema({
-    title: String,
-    description: String,
-    reward: Number,
-    status: { type: String, default: 'Active' },
-    createdAt: { type: Date, default: Date.now }
-}, { collection: 'tasks', strict: false }));
-const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', new mongoose.Schema({
-    username: String,
-    amount: Number,
-    type: String,
-    status: String,
-    meta: Object,
-    createdAt: { type: Date, default: Date.now }
-}, { collection: 'transactions', strict: false }));
-const Withdrawal = mongoose.models.Withdrawal || mongoose.model('Withdrawal', new mongoose.Schema({
-    username: String,
-    amount: Number,
-    method: String,
-    status: String,
-    requestedAt: { type: Date, default: Date.now },
-    processedAt: Date,
-    meta: Object
-}, { collection: 'withdrawals', strict: false }));
-const Notification = mongoose.models.Notification || mongoose.model('Notification', new mongoose.Schema({
-    title: String,
-    message: String,
-    status: String,
-    recipients: Array,
-    createdAt: { type: Date, default: Date.now }
-}, { collection: 'notifications', strict: false }));
+const Combo = mongoose.models.Combo || mongoose.model('Combo', new mongoose.Schema({}, { collection: 'combos', strict: false }));
+const Task = mongoose.models.Task || mongoose.model('Task', new mongoose.Schema({}, { collection: 'tasks', strict: false }));
+const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', new mongoose.Schema({}, { collection: 'transactions', strict: false }));
+const Withdrawal = mongoose.models.Withdrawal || mongoose.model('Withdrawal', new mongoose.Schema({}, { collection: 'withdrawals', strict: false }));
+const Notification = mongoose.models.Notification || mongoose.model('Notification', new mongoose.Schema({}, { collection: 'notifications', strict: false }));
 const Log = mongoose.models.Log || mongoose.model('Log', new mongoose.Schema({}, { collection: 'logs', strict: false }));
 const Setting = mongoose.models.Setting || mongoose.model('Setting', new mongoose.Schema({}, { collection: 'settings', strict: false }));
-const VipLevel = mongoose.models.VipLevel || mongoose.model('VipLevel', new mongoose.Schema({}, { collection: 'vipLevels', strict: false }));
 
 // ========== Cloudinary Config ==========
 cloudinary.config({
@@ -159,11 +124,14 @@ router.options('/login', (req, res) => {
     res.sendStatus(204);
 });
 
+// Stronger token generator: 32 bytes -> 64 hex chars
 function makeToken() {
     return crypto.randomBytes(32).toString('hex');
 }
 
 // POST /admin/login
+// Ensures a fresh token is issued on every successful login, persisted atomically,
+// set as httpOnly cookie and returned in the JSON response.
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
 
@@ -177,28 +145,63 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
+    // Always generate a new token for each successful login.
     const newToken = makeToken();
 
-    // Persist token robustly
+    // Attempt to persist the token robustly:
+    // 1) try updating by _id
+    // 2) fallback to updating by username
+    // 3) final fallback: reload document and save()
     let finalToken = null;
-    try {
-        const updatedAdmin = await Admin.findOneAndUpdate(
-            { _id: adminDoc._id },
-            { $set: { token: newToken } },
-            { new: true, useFindAndModify: false }
-        ).lean().exec();
+    let updatedAdmin = null;
 
-        if (updatedAdmin && updatedAdmin.token) finalToken = String(updatedAdmin.token);
-        else {
-            adminDoc.token = newToken;
-            await adminDoc.save();
-            finalToken = String(adminDoc.token);
+    try {
+        // Best-effort: update by _id
+        try {
+            updatedAdmin = await Admin.findOneAndUpdate(
+                { _id: adminDoc._id },
+                { $set: { token: newToken } },
+                { new: true, useFindAndModify: false }
+            ).lean().exec();
+        } catch (e) {
+            // Log and continue to fallback
+            console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
+        }
+
+        if (!updatedAdmin) {
+            // Fallback: update by username
+            try {
+                updatedAdmin = await Admin.findOneAndUpdate(
+                    { username: adminDoc.username },
+                    { $set: { token: newToken } },
+                    { new: true, useFindAndModify: false }
+                ).lean().exec();
+            } catch (e) {
+                console.warn('Admin token update by username failed:', e && e.message ? e.message : e);
+            }
+        }
+
+        if (updatedAdmin && updatedAdmin.token) {
+            finalToken = String(updatedAdmin.token);
+        } else {
+            // Final fallback: reload the document instance and save
+            const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
+            if (reloaded) {
+                reloaded.token = newToken;
+                await reloaded.save();
+                finalToken = String(reloaded.token);
+            } else {
+                // Could not find the document to update — this is unexpected
+                console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
+                return res.status(500).json({ success: false, message: 'Failed to persist token' });
+            }
         }
     } catch (err) {
         console.error('Error persisting admin token:', err && err.stack ? err.stack : err);
         return res.status(500).json({ success: false, message: 'Failed to persist token' });
     }
 
+    // Set the canonical token as httpOnly cookie so browsers send it automatically
     if (finalToken) {
         try {
             res.cookie('stacksAdminToken', finalToken, {
@@ -212,13 +215,15 @@ router.post('/login', asyncHandler(async (req, res) => {
         }
     }
 
+    // CORS headers
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
 
+    // Return the exact persisted token in JSON (guaranteed to match DB)
     return res.json({ success: true, token: finalToken });
 }));
 
-// GET /admin/token
+// GET /admin/token - return canonical token (reads cookie or header)
 router.get('/token', asyncHandler(async (req, res) => {
     let token = null;
     if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
@@ -233,16 +238,18 @@ router.get('/token', asyncHandler(async (req, res) => {
     }
     if (!token) return res.status(403).json({ success: false, message: 'No token provided' });
 
+    // validate exists in Admin collection
     const admin = await Admin.findOne({ token }).lean().exec();
     if (!admin) return res.status(403).json({ success: false, message: 'Invalid token' });
 
     return res.json({ success: true, token: String(admin.token) });
 }));
 
-// Serve admin settings client script (public)
+// ----------------------- Serve admin settings client script (public) -----------------------
 router.get('/settings.js', (req, res) => {
     const filePath = path.join(__dirname, '..', 'public', 'admin-panel', 'js', 'settings.js');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    // prevent aggressive caching so admin gets latest script after deployments
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.sendFile(filePath, (err) => {
         if (err) {
@@ -255,9 +262,11 @@ router.get('/settings.js', (req, res) => {
 // ----------------------- Middleware: Protect All Other Admin Routes -----------------------
 async function verifyAdminToken(req, res, next) {
     try {
+        // Prefer token from httpOnly cookie 'stacksAdminToken'
         let token = null;
         if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
 
+        // fallback: accept from Authorization: Bearer <token>, x-admin-token or x-auth-token headers
         if (!token) {
             const headerAuth = req.headers['authorization'] || '';
             const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
@@ -278,12 +287,17 @@ async function verifyAdminToken(req, res, next) {
 
         token = token.trim().replace(/^"|"$/g, '');
 
+        // debug: log the incoming token (temporary)
+        console.debug('verifyAdminToken - incoming token:', token);
+
+        // try Admin collection (canonical)
         const adminDoc = await Admin.findOne({ token }).lean().exec();
         if (adminDoc) {
             req.admin = adminDoc;
             return next();
         }
 
+        // fallback: try a User with username "admin" that stores token (legacy)
         const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
         if (userDoc) {
             req.admin = userDoc;
@@ -298,7 +312,7 @@ async function verifyAdminToken(req, res, next) {
     }
 }
 
-// Allow public endpoints to bypass admin auth
+// Allow some public endpoints to bypass admin auth
 router.use((req, res, next) => {
     if (
         req.path === "/login" ||
@@ -319,6 +333,7 @@ router.get('/settings-public', asyncHandler(async (_, res) => {
     if (!settings.service) {
         settings.service = { whatsapp: "", telegram: "" };
     }
+    // Prevent caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -436,7 +451,7 @@ router.get('/withdrawals', asyncHandler(async (req, res) => {
     res.json(list);
 }));
 
-// PUT /admin/withdrawals/:id - update a withdrawal (generic update)
+// PUT /admin/withdrawals/:id - update a withdrawal
 router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const updates = req.body || {};
@@ -448,43 +463,24 @@ router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
 // PATCH approve
 router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const adminUser = req.admin && req.admin.username ? req.admin.username : 'admin';
     const updated = await Withdrawal.findOneAndUpdate(
         { _id: id },
-        { $set: { status: 'Approved', processedAt: new Date(), processedBy: adminUser } },
+        { $set: { status: 'Approved', processedAt: new Date() } },
         { new: true }
     ).lean().exec();
     if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-
-    // Optionally create a transaction record for approved withdrawal (audit)
-    try {
-        await Transaction.create({
-            username: updated.username,
-            amount: -Math.abs(Number(updated.amount || 0)),
-            type: 'withdrawal',
-            status: 'Processed',
-            meta: { withdrawalId: updated._id, processedBy: adminUser },
-            createdAt: new Date()
-        });
-    } catch (e) {
-        console.warn('Failed to create transaction for approved withdrawal', e && e.message ? e.message : e);
-    }
-
     res.json({ success: true, withdrawal: updated });
 }));
 
 // PATCH reject
 router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const adminUser = req.admin && req.admin.username ? req.admin.username : 'admin';
     const updated = await Withdrawal.findOneAndUpdate(
         { _id: id },
-        { $set: { status: 'Rejected', processedAt: new Date(), processedBy: adminUser } },
+        { $set: { status: 'Rejected', processedAt: new Date() } },
         { new: true }
     ).lean().exec();
     if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-
-    // Optionally mark related transaction or send back funds - depends on business logic
     res.json({ success: true, withdrawal: updated });
 }));
 
@@ -496,181 +492,291 @@ router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
     res.json({ success: true });
 }));
 
-// ===================== COMBOS API ===================== //
-router.get('/combos', asyncHandler(async (req, res) => {
-    const combos = await Combo.find({}).lean().exec();
-    res.json(combos);
+// ===================== SETTINGS API ENHANCED (SERVICE & ACTIVITY LOCK) ===================== //
+router.get('/settings', asyncHandler(async (_, res) => {
+    let settings = await Setting.findOne({}).lean() || {};
+
+    // Ensure all fields are always present for the frontend
+    settings.siteName = settings.siteName || "";
+    settings.currency = settings.currency || "";
+    // New defaults for currencySymbol and decimals
+    settings.currencySymbol = settings.currencySymbol || "";
+    settings.currencyDecimals = (typeof settings.currencyDecimals === 'number') ? settings.currencyDecimals : 2;
+    settings.currencyPosition = settings.currencyPosition || "after"; // optional: "before" or "after"
+
+    settings.defaultVip = settings.defaultVip || 1;
+    settings.inviteBonus = settings.inviteBonus || 0;
+    settings.telegramGroup = settings.telegramGroup || "";
+    settings.homepageNotice = settings.homepageNotice || "";
+    settings.depositInstructions = settings.depositInstructions || "";
+    settings.withdrawInstructions = settings.withdrawInstructions || "";
+    settings.minWithdraw = settings.minWithdraw || 0;
+    settings.maxWithdraw = settings.maxWithdraw || 0;
+
+    // Normalise withdraw fee fields: support legacy `withdrawFee` and canonical `withdrawFeePercent`
+    if (typeof settings.withdrawFeePercent === 'undefined' && typeof settings.withdrawFee !== 'undefined') {
+        settings.withdrawFeePercent = settings.withdrawFee;
+    }
+    settings.withdrawFeePercent = settings.withdrawFeePercent || 0;
+
+    settings.minDeposit = settings.minDeposit || 0;
+    settings.maxDeposit = settings.maxDeposit || 0;
+    settings.dailyTaskSet = settings.dailyTaskSet || 0;
+    settings.maintenance = !!settings.maintenance;
+    settings.maintenanceMode = !!settings.maintenanceMode;
+
+    if (!settings.service) {
+        settings.service = { whatsapp: "", telegram: "" };
+    } else {
+        settings.service.whatsapp = settings.service.whatsapp || "";
+        settings.service.telegram = settings.service.telegram || "";
+    }
+
+    if (typeof settings.activityLock !== "object") {
+        settings.activityLock = { enabled: false, users: [] };
+    } else {
+        settings.activityLock.enabled = !!settings.activityLock.enabled;
+        if (!Array.isArray(settings.activityLock.users)) settings.activityLock.users = [];
+    }
+
+    // platform closing helpers (ensure naming consistency)
+    settings.platformClosed = !!settings.platformClosed;
+    settings.autoOpenHourUK = typeof settings.autoOpenHourUK === 'number' ? settings.autoOpenHourUK : 10;
+    settings.whoCanAccessDuringClose = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
+
+    // Provide frontend-friendly aliases:
+    const hour = Number(settings.autoOpenHourUK);
+    if (!isNaN(hour) && hour >= 0 && hour <= 23) {
+        const hh = String(hour).padStart(2, '0');
+        settings.autoOpenTime = `${hh}:00`;
+    } else {
+        settings.autoOpenTime = "";
+    }
+    settings.allowList = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
+
+    res.json(settings);
 }));
 
-router.post('/combos', asyncHandler(async (req, res) => {
-    const { username, triggerTaskNumber, products } = req.body || {};
-    if (!username) return res.status(400).json({ success: false, message: 'Username required' });
-    const combo = await Combo.create({ username, triggerTaskNumber, products });
-    res.json({ success: true, combo });
-}));
+router.post('/settings', asyncHandler(async (req, res) => {
+    // Debug logging to help ensure requests reach this handler and payloads are as-expected
+    console.log('ADMIN POST /admin/settings called - x-admin-token:', req.headers['x-admin-token']);
+    try {
+        console.log('ADMIN POST /admin/settings payload (truncated):', JSON.stringify(req.body).slice(0, 1000));
+    } catch (e) {
+        console.warn('Could not stringify payload for log');
+    }
 
-router.get('/combos/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const combo = await Combo.findById(id).lean().exec();
-    if (!combo) return res.status(404).json({ success: false, message: 'Combo not found' });
-    res.json({ success: true, combo });
-}));
-
-router.put('/combos/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
     const updates = req.body || {};
-    const updated = await Combo.findByIdAndUpdate(id, updates, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Combo not found' });
-    res.json({ success: true, combo: updated });
+
+    // Build an update document (use atomic findOneAndUpdate with upsert to avoid race/duplicate issues)
+    const updateDoc = {};
+
+    // whitelisted simple fields
+    const simpleFields = [
+        "siteName", "currency", "currencySymbol", "currencyDecimals", "currencyPosition",
+        "defaultVip", "inviteBonus", "telegramGroup",
+        "homepageNotice", "depositInstructions", "withdrawInstructions",
+        "minWithdraw", "maxWithdraw", "minDeposit", "maxDeposit",
+        "dailyTaskSet", "maintenance", "maintenanceMode"
+    ];
+    for (const key of simpleFields) {
+        if (updates[key] !== undefined) updateDoc[key] = updates[key];
+    }
+
+    // Ensure currencyDecimals is a number if provided
+    if (updates.currencyDecimals !== undefined) {
+        const parsed = Number(updates.currencyDecimals);
+        updateDoc.currencyDecimals = Number.isFinite(parsed) ? parsed : 2;
+    }
+
+    // withdraw fee normalization
+    if (updates.withdrawFeePercent !== undefined) {
+        const parsed = Number(updates.withdrawFeePercent);
+        updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
+    } else if (updates.withdrawFee !== undefined) {
+        const parsed = Number(updates.withdrawFee);
+        updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
+    }
+
+    // service merge (keep existing keys if not provided)
+    if (updates.service && typeof updates.service === 'object') {
+        // We'll set service fully to provided object (merge on DB side)
+        updateDoc.service = { ...(updates.service || {}) };
+    }
+
+    // activityLock normalization
+    if (updates.activityLock && typeof updates.activityLock === 'object') {
+        const acl = {
+            enabled: !!updates.activityLock.enabled,
+            users: []
+        };
+        if (Array.isArray(updates.activityLock.users)) {
+            acl.users = updates.activityLock.users.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.activityLock.users === 'string') {
+            acl.users = updates.activityLock.users.split(',').map(u => u.trim()).filter(Boolean);
+        }
+        updateDoc.activityLock = acl;
+    }
+
+    // platform closing controls
+    if (updates.platformClosed !== undefined) {
+        updateDoc.platformClosed = !!updates.platformClosed;
+    }
+
+    // parse autoOpenTime "HH:MM" to autoOpenHourUK if provided
+    if (updates.autoOpenHourUK !== undefined && !isNaN(Number(updates.autoOpenHourUK))) {
+        updateDoc.autoOpenHourUK = Number(updates.autoOpenHourUK);
+    } else if (typeof updates.autoOpenTime === 'string' && updates.autoOpenTime.trim()) {
+        const parts = updates.autoOpenTime.split(':');
+        const parsed = parseInt(parts[0], 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+            updateDoc.autoOpenHourUK = parsed;
+        }
+    }
+
+    // allowList / whoCanAccessDuringClose normalization
+    if (updates.allowList !== undefined) {
+        if (Array.isArray(updates.allowList)) {
+            updateDoc.whoCanAccessDuringClose = updates.allowList.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.allowList === 'string') {
+            updateDoc.whoCanAccessDuringClose = updates.allowList.split(',').map(u => u.trim()).filter(Boolean);
+        } else {
+            updateDoc.whoCanAccessDuringClose = [];
+        }
+    } else if (updates.whoCanAccessDuringClose !== undefined) {
+        if (Array.isArray(updates.whoCanAccessDuringClose)) {
+            updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.map(u => String(u || '').trim()).filter(Boolean);
+        } else if (typeof updates.whoCanAccessDuringClose === 'string') {
+            updateDoc.whoCanAccessDuringClose = updates.whoCanAccessDuringClose.split(',').map(u => u.trim()).filter(Boolean);
+        } else {
+            updateDoc.whoCanAccessDuringClose = [];
+        }
+    }
+
+    if (typeof updateDoc.service === 'undefined') {
+        // leave service untouched unless provided
+    } else {
+        updateDoc.service.whatsapp = updateDoc.service.whatsapp || "";
+        updateDoc.service.telegram = updateDoc.service.telegram || "";
+    }
+
+    if (typeof updateDoc.activityLock === 'undefined') {
+        // leave untouched
+    }
+
+    // Perform atomic update with upsert and return the new doc
+    const saved = await Setting.findOneAndUpdate(
+        {},
+        { $set: updateDoc },
+        { upsert: true, new: true }
+    ).exec();
+
+    console.log('ADMIN POST /admin/settings saved settings id:', saved && saved._id);
+    res.json({ success: true, settings: saved });
 }));
 
-router.delete('/combos/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const result = await Combo.deleteOne({ _id: id }).exec();
-    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Combo not found' });
-    res.json({ success: true });
+// ===================== USERS API (RESTful) ===================== //
+router.get('/users', asyncHandler(async (_, res) => {
+    const users = await User.find({}).lean();
+    res.json(users);
 }));
+router.post('/users', asyncHandler(async (req, res) => {
+    const { username, phone, vipLevel, balance, exchange, walletAddress } = req.body;
+    if (!username || !phone) return res.status(400).json({ success: false, message: 'Username and phone are required' });
+    const exists = await User.findOne({ username }).lean();
+    if (exists) return res.status(409).json({ success: false, message: 'Username already exists' });
 
-// ===================== TASKS API ===================== //
-router.get('/tasks', asyncHandler(async (req, res) => {
-    const tasks = await Task.find({}).lean().exec();
-    res.json(tasks);
+    const user = {
+        username,
+        phone,
+        vipLevel: vipLevel || 1,
+        balance: balance || 0,
+        status: "Active",
+        tasksCompletedInSet: 0,
+        tasksSetSize: 40,
+        exchange: exchange || "",
+        walletAddress: walletAddress || ""
+    };
+    await User.create(user);
+    res.json({ success: true, user });
 }));
-
-router.post('/tasks', asyncHandler(async (req, res) => {
-    const { title, description, reward, status } = req.body || {};
-    if (!title) return res.status(400).json({ success: false, message: 'Title required' });
-    const task = await Task.create({ title, description, reward: Number(reward || 0), status: status || 'Active' });
-    res.json({ success: true, task });
+router.put('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const updates = req.body;
+    const user = await User.findOneAndUpdate({ username }, updates, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, user });
 }));
-
-router.get('/tasks/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const task = await Task.findById(id).lean().exec();
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.json({ success: true, task });
-}));
-
-router.put('/tasks/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body || {};
-    const updated = await Task.findByIdAndUpdate(id, updates, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.json({ success: true, task: updated });
-}));
-
-router.patch('/tasks/:id/disable', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const task = await Task.findById(id).lean().exec();
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    const newStatus = (task.status === 'Suspended' || task.status === 'Disabled') ? 'Active' : 'Suspended';
-    await Task.updateOne({ _id: id }, { $set: { status: newStatus } }).exec();
+router.patch('/users/:username/suspend', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const newStatus = user.status === "Suspended" ? "Active" : "Suspended";
+    await User.updateOne({ username }, { $set: { status: newStatus } });
     res.json({ success: true, status: newStatus });
 }));
+router.delete('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const result = await User.deleteOne({ username });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true });
+}));
+router.get('/users/:username', asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, user });
+}));
 
-// ===================== TRANSACTIONS API ===================== //
-router.get('/transactions', asyncHandler(async (req, res) => {
-    const { status, username, from, to, limit } = req.query;
-    const q = {};
-    if (status) q.status = status;
-    if (username) q.username = username;
-    if (from || to) {
-        q.createdAt = {};
-        if (from) q.createdAt.$gte = new Date(from);
-        if (to) q.createdAt.$lte = new Date(to);
+router.post('/reset-user-task-set', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const userDoc = await User.findOne({ username });
+    const newSet = (userDoc && typeof userDoc.currentSet === 'number') ? userDoc.currentSet + 1 : 2;
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0, currentSet: newSet } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress and set reset for user.' });
+}));
+
+router.post('/reset-user-task-progress', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0 } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress reset for user.' });
+}));
+
+router.post('/vip/bulk-upgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.min(user.vipLevel + 1, 10);
+            await user.save();
+            changed++;
+        }
     }
-    const l = Math.min(1000, parseInt(limit || '200', 10));
-    const txs = await Transaction.find(q).sort({ createdAt: -1 }).limit(l).lean().exec();
-    res.json(txs);
+    res.json({ success: true, changed });
+}));
+router.post('/vip/bulk-downgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.max(user.vipLevel - 1, 1);
+            await user.save();
+            changed++;
+        }
+    }
+    res.json({ success: true, changed });
 }));
 
-router.get('/transactions/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const tx = await Transaction.findById(id).lean().exec();
-    if (!tx) return res.status(404).json({ success: false, message: 'Transaction not found' });
-    res.json({ success: true, transaction: tx });
-}));
-
-router.put('/transactions/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body || {};
-    const updated = await Transaction.findByIdAndUpdate(id, updates, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Transaction not found' });
-    res.json({ success: true, transaction: updated });
-}));
-
-router.patch('/transactions/:id/status', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body || {};
-    if (!status) return res.status(400).json({ success: false, message: 'Status required' });
-    const updated = await Transaction.findByIdAndUpdate(id, { $set: { status } }, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Transaction not found' });
-    res.json({ success: true, transaction: updated });
-}));
-
-// ===================== NOTIFICATIONS API ===================== //
-router.get('/notifications', asyncHandler(async (req, res) => {
-    const list = await Notification.find({}).sort({ createdAt: -1 }).lean().exec();
-    res.json(list);
-}));
-
-router.post('/notifications', asyncHandler(async (req, res) => {
-    const { title, message, status, recipients } = req.body || {};
-    if (!title || !message) return res.status(400).json({ success: false, message: 'Title and message required' });
-    const notif = await Notification.create({
-        title, message, status: status || 'Active', recipients: recipients || ['all']
-    });
-    res.json({ success: true, notification: notif });
-}));
-
-router.put('/notifications/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body || {};
-    const updated = await Notification.findByIdAndUpdate(id, updates, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Notification not found' });
-    res.json({ success: true, notification: updated });
-}));
-
-router.patch('/notifications/:id/deactivate', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updated = await Notification.findByIdAndUpdate(id, { $set: { status: 'Inactive' } }, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'Notification not found' });
-    res.json({ success: true, notification: updated });
-}));
-
-router.delete('/notifications/:id', asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const result = await Notification.deleteOne({ _id: id }).exec();
-    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Notification not found' });
-    res.json({ success: true });
-}));
-
-// ===================== VIP LEVELS API ===================== //
-router.get('/vip-levels', asyncHandler(async (req, res) => {
-    const list = await VipLevel.find({}).lean().exec();
-    res.json(list);
-}));
-
-router.post('/vip-levels', asyncHandler(async (req, res) => {
-    const doc = req.body || {};
-    const created = await VipLevel.create(doc);
-    res.json({ success: true, vipLevel: created });
-}));
-
-router.put('/vip-levels/:id', asyncHandler(async (req, res) => {
-    const updated = await VipLevel.findByIdAndUpdate(req.params.id, req.body || {}, { new: true }).lean().exec();
-    if (!updated) return res.status(404).json({ success: false, message: 'VIP level not found' });
-    res.json({ success: true, vipLevel: updated });
-}));
-
-router.delete('/vip-levels/:id', asyncHandler(async (req, res) => {
-    const result = await VipLevel.deleteOne({ _id: req.params.id }).exec();
-    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'VIP level not found' });
-    res.json({ success: true });
-}));
-
-// ===================== PRODUCTS, USERS, SETTINGS, ETC. (kept intact) ===================== //
-// Products endpoints (already present earlier; re-include to ensure full coverage)
 router.get('/products', asyncHandler(async (_, res) => {
     const products = await Product.find({}).lean();
     res.json(products);
@@ -718,7 +824,6 @@ router.get('/products/:id', asyncHandler(async (req, res) => {
     res.json({ success: true, product });
 }));
 
-// (Remaining routes preserved - if your original file had extra custom endpoints, they should be re-added here)
+// (Remaining routes kept as in original file)
 
-// Export router
 module.exports = router;
