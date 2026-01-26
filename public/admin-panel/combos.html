@@ -26,12 +26,76 @@
 </head>
 <body>
   <script>
-    // Redirect to login if token missing
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      alert("Access denied. Please login.");
-      window.location.href = "/admin-panel/login.html";
+  (function(){
+    // Inline admin auth helper (drop into each HTML admin page)
+    function getToken(){
+      return localStorage.getItem('stacksAdminToken') || localStorage.getItem('adminToken') || null;
     }
+
+    function requireAuth(){
+      const t = getToken();
+      if (!t) {
+        alert('Access denied. Please login.');
+        window.location.href = '/admin-panel/login.html';
+      }
+      return t;
+    }
+
+    async function authFetch(url, opts){
+      opts = Object.assign({}, opts || {});
+      opts.headers = Object.assign({}, opts.headers || {});
+
+      const token = getToken();
+      if (token) {
+        opts.headers['x-admin-token'] = token;
+        if (!opts.headers['Authorization'] && !opts.headers['authorization']) {
+          opts.headers['Authorization'] = 'Bearer ' + token;
+        }
+      }
+
+      // Ensure the httpOnly cookie (if set by server) is sent as well
+      opts.credentials = 'include';
+
+      // If sending body and no content-type set, default to JSON
+      if (opts.body && !opts.headers['Content-Type'] && !(opts.body instanceof FormData)) {
+        opts.headers['Content-Type'] = 'application/json';
+      }
+
+      let res;
+      try {
+        res = await fetch(url, opts);
+      } catch (err) {
+        // network error -> bubble up
+        throw err;
+      }
+
+      // Central handling of expired/unauthorized sessions
+      if (res.status === 401 || res.status === 403) {
+        // Clear client-side token(s) to force login
+        try {
+          localStorage.removeItem('stacksAdminToken');
+          localStorage.removeItem('adminToken');
+          // expire convenience cookie if present
+          document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        } catch(e){/*ignore*/}
+        // Redirect to login
+        window.location.href = '/admin-panel/login.html';
+        const err = new Error('Unauthorized');
+        err.status = res.status;
+        throw err;
+      }
+
+      return res;
+    }
+
+    // expose small API
+    window.requireAuth = requireAuth;
+    window.authFetch = authFetch;
+    window.getAdminToken = getToken;
+
+    // Immediately require auth when script loads (same behavior as your users.html top-check)
+    requireAuth();
+  })();
   </script>
 
   <div class="main-content" id="mainContent">
@@ -116,9 +180,7 @@
 
     async function fetchCombos() {
       try {
-        const res = await fetch('/admin/combos', {
-          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
-        });
+        const res = await authFetch('/admin/combos');
         if (!res.ok) throw new Error('Unauthorized');
         allCombos = await res.json();
         renderCombos(allCombos);
@@ -164,12 +226,14 @@
       if (max) params.push("maxPrice=" + encodeURIComponent(max));
       if (params.length) url += "?" + params.join("&");
       lastPriceFilter = {min, max};
-      const res = await fetch(url, {
-        headers: { 'x-admin-token': localStorage.getItem('adminToken') }
-      });
-      const data = await res.json();
-      productsList = data.products || [];
-      renderProductGrid();
+      try {
+        const res = await authFetch(url);
+        const data = await res.json();
+        productsList = data.products || [];
+        renderProductGrid();
+      } catch (e) {
+        showToast("Failed to load products.");
+      }
     }
 
     function onPriceFilterChange() {
@@ -277,31 +341,28 @@
         price: Number(price), commission: Number(commission)
       }));
 
-      if (editingComboIndex !== null) {
-        // Edit
-        const combo = allCombos[editingComboIndex];
-        const comboId = combo.id || combo._id;
-        await fetch(`/admin/combos/${encodeURIComponent(comboId)}`, {
-          method: 'PUT',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ username, triggerTaskNumber, products })
-        });
-        showToast("Combo updated!");
-      } else {
-        // Add
-        await fetch('/admin/combos', {
-          method: 'POST',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ username, triggerTaskNumber, products })
-        });
-        showToast("Combo assigned!");
+      try {
+        if (editingComboIndex !== null) {
+          // Edit
+          const combo = allCombos[editingComboIndex];
+          const comboId = combo.id || combo._id;
+          await authFetch(`/admin/combos/${encodeURIComponent(comboId)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ username, triggerTaskNumber, products })
+          });
+          showToast("Combo updated!");
+        } else {
+          // Add
+          await authFetch('/admin/combos', {
+            method: 'POST',
+            body: JSON.stringify({ username, triggerTaskNumber, products })
+          });
+          showToast("Combo assigned!");
+        }
+      } catch (e) {
+        showToast("Failed to save combo.");
       }
+
       closeComboModal();
       fetchCombos();
     };
@@ -328,12 +389,13 @@
       const combo = allCombos[idx];
       const comboId = combo.id || combo._id;
       if (confirm("Are you sure you want to delete this combo?")) {
-        await fetch(`/admin/combos/${encodeURIComponent(comboId)}`, {
-          method: 'DELETE',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
-        showToast("Combo deleted.");
-        fetchCombos();
+        try {
+          await authFetch(`/admin/combos/${encodeURIComponent(comboId)}`, { method: 'DELETE' });
+          showToast("Combo deleted.");
+          fetchCombos();
+        } catch (e) {
+          showToast("Failed to delete combo.");
+        }
       }
     }
 
@@ -342,10 +404,11 @@
         for (let idx of selectedCombos) {
           const combo = allCombos[idx];
           const comboId = combo.id || combo._id;
-          await fetch(`/admin/combos/${encodeURIComponent(comboId)}`, {
-            method: 'DELETE',
-            headers: { "x-admin-token": localStorage.getItem('adminToken') }
-          });
+          try {
+            await authFetch(`/admin/combos/${encodeURIComponent(comboId)}`, { method: 'DELETE' });
+          } catch (e) {
+            // continue
+          }
         }
         selectedCombos.clear();
         showToast("Selected combos deleted.");
@@ -378,7 +441,11 @@
       setTimeout(() => { toast.className = "toast"; }, 3000);
     }
     function logout() {
-      localStorage.removeItem("adminToken");
+      try {
+        localStorage.removeItem('stacksAdminToken');
+        localStorage.removeItem('adminToken');
+        document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      } catch(e){}
       window.location.href = "/admin-panel/login.html";
     }
 
