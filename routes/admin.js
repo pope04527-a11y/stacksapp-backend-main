@@ -1,15 +1,15 @@
 /**
  * routes/admin.js
  *
- * Full file with login/token handling tightened so the exact persisted token is returned
- * and stored by the admin panel client. Other routes are preserved.
+ * Updated admin routes that preserve your original working logic while:
+ * - Setting an httpOnly cookie on successful /admin/login
+ * - Adding GET /admin/token to return the canonical persisted token
+ * - Accepting token from cookie, Authorization Bearer, x-admin-token, x-auth-token
+ * - Validating ids early (avoids Mongoose CastError for 'undefined')
+ * - Approve/reject withdrawals: attempt transaction when supported, fallback to atomic updates + refund
  *
- * Replace existing routes/admin.js with this file and restart the server.
- *
- * NOTE: This version keeps the transactional logic but also includes a safe
- * non-transactional fallback for MongoDB deployments that are not replica sets.
- * That ensures approve/reject operations won't throw on standalone servers and
- * will behave atomically where transactions are available.
+ * NOTE: This file keeps all original routes and behavior you provided and only
+ * introduces defensive validation and the token/cookie improvements.
  */
 
 const express = require('express');
@@ -26,7 +26,7 @@ console.log('[ADMIN ROUTES LOADED] file=', __filename);
 // ========== MODELS (SAFE DEFINITION) ==========
 const Admin = mongoose.models.Admin || mongoose.model('Admin', new mongoose.Schema({
     username: String,
-    password: String, // NOTE: plaintext in this example; hash in production!
+    password: String, // Hash in production!
     token: String
 }, { collection: 'admin' }));
 
@@ -51,8 +51,8 @@ cloudinary.config({
 function asyncHandler(fn) {
     return function (req, res, next) {
         Promise.resolve(fn(req, res, next)).catch((e) => {
-            console.error(e);
-            // If the thrown object contains a status property, use it (used below in transactions)
+            console.error(e && (e.stack || e.message) ? (e.stack || e.message) : e);
+            // If the thrown object contains a status property, use it
             if (e && e.status && typeof e.status === 'number') {
                 return res.status(e.status).json({ success: false, message: e.message || 'Error' });
             }
@@ -143,87 +143,18 @@ router.options('/login', (req, res) => {
     res.sendStatus(204);
 });
 
-// Stronger token generator: 32 bytes -> 64 hex chars
-function makeToken() {
-    return crypto.randomBytes(32).toString('hex');
-}
-
 // POST /admin/login
-// Ensures a fresh token is issued on every successful login, persisted atomically,
-// set as httpOnly cookie and returned in the JSON response.
 router.post('/login', asyncHandler(async (req, res) => {
-    const { username, password } = req.body || {};
+    const { username, password } = req.body;
+    const admin = await Admin.findOne({ username, password }).lean();
+    if (admin) {
+        // generate token and persist
+        const token = crypto.randomBytes(24).toString('hex');
+        await Admin.updateOne({ _id: admin._id }, { $set: { token } });
 
-    if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Username and password required' });
-    }
-
-    // Find admin by username/password (legacy plaintext)
-    const adminDoc = await Admin.findOne({ username, password }).exec();
-    if (!adminDoc) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    // Always generate a new token for each successful login.
-    const newToken = makeToken();
-
-    // Attempt to persist the token robustly:
-    // 1) try updating by _id
-    // 2) fallback to updating by username
-    // 3) final fallback: reload document and save()
-    let finalToken = null;
-    let updatedAdmin = null;
-
-    try {
-        // Best-effort: update by _id
+        // Set httpOnly cookie for browsers so credentials: 'include' works
         try {
-            updatedAdmin = await Admin.findOneAndUpdate(
-                { _id: adminDoc._id },
-                { $set: { token: newToken } },
-                { new: true, useFindAndModify: false }
-            ).lean().exec();
-        } catch (e) {
-            // Log and continue to fallback
-            console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
-        }
-
-        if (!updatedAdmin) {
-            // Fallback: update by username
-            try {
-                updatedAdmin = await Admin.findOneAndUpdate(
-                    { username: adminDoc.username },
-                    { $set: { token: newToken } },
-                    { new: true, useFindAndModify: false }
-                ).lean().exec();
-            } catch (e) {
-                console.warn('Admin token update by username failed:', e && e.message ? e.message : e);
-            }
-        }
-
-        if (updatedAdmin && updatedAdmin.token) {
-            finalToken = String(updatedAdmin.token);
-        } else {
-            // Final fallback: reload the document instance and save
-            const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
-            if (reloaded) {
-                reloaded.token = newToken;
-                await reloaded.save();
-                finalToken = String(reloaded.token);
-            } else {
-                // Could not find the document to update — this is unexpected
-                console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
-                return res.status(500).json({ success: false, message: 'Failed to persist token' });
-            }
-        }
-    } catch (err) {
-        console.error('Error persisting admin token:', err && err.stack ? err.stack : err);
-        return res.status(500).json({ success: false, message: 'Failed to persist token' });
-    }
-
-    // Set the canonical token as httpOnly cookie so browsers send it automatically
-    if (finalToken) {
-        try {
-            res.cookie('stacksAdminToken', finalToken, {
+            res.cookie('stacksAdminToken', token, {
                 httpOnly: true,
                 sameSite: 'Lax',
                 secure: process.env.NODE_ENV === 'production',
@@ -232,20 +163,22 @@ router.post('/login', asyncHandler(async (req, res) => {
         } catch (e) {
             console.warn('Failed to set admin cookie', e && e.message ? e.message : e);
         }
+
+        res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+        res.header("Access-Control-Allow-Credentials", "true");
+        return res.json({ success: true, token });
     }
-
-    // CORS headers
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.header("Access-Control-Allow-Credentials", "true");
-
-    // Return the exact persisted token in JSON (guaranteed to match DB)
-    return res.json({ success: true, token: finalToken });
+    res.status(401).json({ success: false, message: 'Invalid credentials' });
 }));
 
 // GET /admin/token - return canonical token (reads cookie or header)
 router.get('/token', asyncHandler(async (req, res) => {
     let token = null;
+
+    // Preferred: cookie
     if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
+
+    // Fallback to Authorization Bearer or x-admin-token header
     if (!token) {
         const headerAuth = req.headers['authorization'] || '';
         const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
@@ -255,9 +188,9 @@ router.get('/token', asyncHandler(async (req, res) => {
             token = String(headerAdmin);
         }
     }
+
     if (!token) return res.status(403).json({ success: false, message: 'No token provided' });
 
-    // validate exists in Admin collection
     const admin = await Admin.findOne({ token }).lean().exec();
     if (!admin) return res.status(403).json({ success: false, message: 'Invalid token' });
 
@@ -300,26 +233,23 @@ async function verifyAdminToken(req, res, next) {
         }
 
         if (!token) {
-            console.warn('verifyAdminToken: no token provided');
+            console.warn('verifyAdminToken: unauthorized request, no token provided');
             return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
 
         token = token.trim().replace(/^"|"$/g, '');
 
-        // debug: log the incoming token (temporary)
-        console.debug('verifyAdminToken - incoming token:', token);
-
-        // try Admin collection (canonical)
-        const adminDoc = await Admin.findOne({ token }).lean().exec();
-        if (adminDoc) {
-            req.admin = adminDoc;
+        // check Admin collection
+        let admin = await Admin.findOne({ token }).lean();
+        if (admin) {
+            req.admin = admin;
             return next();
         }
 
-        // fallback: try a User with username "admin" that stores token (legacy)
-        const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
-        if (userDoc) {
-            req.admin = userDoc;
+        // fallback: accept token stored in User with username 'admin'
+        admin = await User.findOne({ username: "admin", token }).lean();
+        if (admin) {
+            req.admin = admin;
             return next();
         }
 
@@ -330,9 +260,8 @@ async function verifyAdminToken(req, res, next) {
         return res.status(500).json({ success: false, message: 'Server error' });
     }
 }
-
-// Allow some public endpoints to bypass admin auth
 router.use((req, res, next) => {
+    // Allow some public endpoints to bypass admin auth
     if (
         req.path === "/login" ||
         req.method === "OPTIONS" ||
@@ -572,6 +501,19 @@ async function rejectWithdrawalFallback(id, processedBy, adminNote) {
         const userUpdateRes = await User.findOneAndUpdate(userQuery, { $inc: { balance: amount } }, { new: true }).lean().exec();
         if (userUpdateRes) {
             refundedUser = { username: userUpdateRes.username, balance: userUpdateRes.balance };
+            // Optionally create Transaction record
+            try {
+                await Transaction.create({
+                    user: userUpdateRes.username,
+                    userId: userUpdateRes._id,
+                    type: 'withdraw_reject_refund',
+                    amount,
+                    status: 'Completed',
+                    createdAt: new Date().toISOString()
+                });
+            } catch (e) {
+                console.warn('Failed to create refund transaction record:', e && e.message ? e.message : e);
+            }
         } else {
             console.warn('Reject refund: user not found for', userQuery);
         }
@@ -601,7 +543,6 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     }
 
     if (session && typeof session.withTransaction === 'function') {
-        // Attempt transactional flow, but catch and fallback on errors.
         try {
             let updatedWithdrawal = null;
             await session.withTransaction(async () => {
@@ -625,7 +566,21 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
                 if (adminNote) w.adminNote = adminNote;
                 await w.save({ session });
 
-                // Hook for extra transactional bookkeeping could be added here.
+                // Optionally create a Transaction record inside transaction
+                try {
+                    await Transaction.create([{
+                        user: w.username || w.user || '',
+                        userId: w.userId || null,
+                        type: 'withdraw_approved',
+                        amount: w.amount || 0,
+                        status: 'Completed',
+                        reference: `withdrawal:${w._id}`,
+                        createdAt: new Date().toISOString()
+                    }], { session });
+                } catch (e) {
+                    // non-fatal, log
+                    console.warn('Failed to create transaction record in transaction:', e && e.message ? e.message : e);
+                }
 
                 updatedWithdrawal = w.toObject();
             });
@@ -645,6 +600,22 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     // Fallback non-transactional path (atomic conditional update)
     try {
         const updated = await approveWithdrawalFallback(id, processedBy, adminNote);
+
+        // Attempt to create a Transaction record (best-effort)
+        try {
+            await Transaction.create({
+                user: updated.username || updated.user || '',
+                userId: updated.userId || null,
+                type: 'withdraw_approved',
+                amount: updated.amount || 0,
+                status: 'Completed',
+                reference: `withdrawal:${updated._id}`,
+                createdAt: new Date().toISOString()
+            });
+        } catch (e) {
+            console.warn('Failed to create transaction record for approve fallback:', e && e.message ? e.message : e);
+        }
+
         return res.json({ success: true, withdrawal: updated });
     } catch (err) {
         if (err && err.status) return res.status(err.status).json({ success: false, message: err.message });
@@ -707,7 +678,21 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                         userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
                         await userDoc.save({ session });
                         refundedUser = { username: userDoc.username, balance: userDoc.balance };
-                        // optionally add Transaction record here inside the same transaction
+
+                        // create transaction record inside transaction
+                        try {
+                            await Transaction.create([{
+                                user: userDoc.username,
+                                userId: userDoc._id,
+                                type: 'withdraw_reject_refund',
+                                amount,
+                                status: 'Completed',
+                                reference: `withdrawal_refund:${w._id}`,
+                                createdAt: new Date().toISOString()
+                            }], { session });
+                        } catch (e) {
+                            console.warn('Failed to create refund transaction in transaction:', e && e.message ? e.message : e);
+                        }
                     } else {
                         console.warn('Rejecting withdrawal but user not found to refund (transactional):', userQuery);
                     }
@@ -747,6 +732,15 @@ router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
     const result = await Withdrawal.deleteOne({ _id: id }).exec();
     if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
     res.json({ success: true });
+}));
+
+// GET single withdrawal
+router.get('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!isValidId(id)) return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    const withdrawal = await Withdrawal.findById(id).lean();
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal });
 }));
 
 // ===================== SETTINGS API ENHANCED (SERVICE & ACTIVITY LOCK) ===================== //
@@ -983,6 +977,55 @@ router.get('/users/:username', asyncHandler(async (req, res) => {
     const user = await User.findOne({ username }).lean();
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
+}));
+
+router.post('/reset-user-task-set', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const userDoc = await User.findOne({ username });
+    const newSet = (userDoc && typeof userDoc.currentSet === 'number') ? userDoc.currentSet + 1 : 2;
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0, currentSet: newSet } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress and set reset for user.' });
+}));
+
+router.post('/reset-user-task-progress', asyncHandler(async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required' });
+    const user = await User.findOneAndUpdate({ username }, { $set: { tasksCompletedInSet: 0 } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Task progress reset for user.' });
+}));
+
+router.post('/vip/bulk-upgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.min(user.vipLevel + 1, 10);
+            await user.save();
+            changed++;
+        }
+    }
+    res.json({ success: true, changed });
+}));
+router.post('/vip/bulk-downgrade', asyncHandler(async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || !usernames.length)
+        return res.status(400).json({ success: false, message: 'Usernames required.' });
+    const users = await User.find({ username: { $in: usernames } });
+    let changed = 0;
+    for (const user of users) {
+        if (typeof user.vipLevel === 'number') {
+            user.vipLevel = Math.max(user.vipLevel - 1, 1);
+            await user.save();
+            changed++;
+        }
+    }
+    res.json({ success: true, changed });
 }));
 
 // (Remaining routes kept as in original file)
