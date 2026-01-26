@@ -444,6 +444,54 @@ router.get('/pending-withdrawals', asyncHandler(async (_, res) => {
     res.json({ count });
 }));
 
+// ===================== WITHDRAWALS API ===================== //
+// GET /admin/withdrawals - list withdrawals
+router.get('/withdrawals', asyncHandler(async (req, res) => {
+    const list = await Withdrawal.find({}).lean().exec();
+    res.json(list);
+}));
+
+// PUT /admin/withdrawals/:id - update a withdrawal
+router.put('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body || {};
+    const updated = await Withdrawal.findOneAndUpdate({ _id: id }, { $set: updates }, { new: true }).lean().exec();
+    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal: updated });
+}));
+
+// PATCH approve
+router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updated = await Withdrawal.findOneAndUpdate(
+        { _id: id },
+        { $set: { status: 'Approved', processedAt: new Date() } },
+        { new: true }
+    ).lean().exec();
+    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal: updated });
+}));
+
+// PATCH reject
+router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updated = await Withdrawal.findOneAndUpdate(
+        { _id: id },
+        { $set: { status: 'Rejected', processedAt: new Date() } },
+        { new: true }
+    ).lean().exec();
+    if (!updated) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true, withdrawal: updated });
+}));
+
+// DELETE
+router.delete('/withdrawals/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await Withdrawal.deleteOne({ _id: id }).exec();
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    res.json({ success: true });
+}));
+
 // ===================== SETTINGS API ENHANCED (SERVICE & ACTIVITY LOCK) ===================== //
 router.get('/settings', asyncHandler(async (_, res) => {
     let settings = await Setting.findOne({}).lean() || {};
