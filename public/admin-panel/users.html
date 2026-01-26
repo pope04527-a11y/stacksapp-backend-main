@@ -6,6 +6,71 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Small inline styles for modal field labels positioned top-right of each input box */
+    .modal .modal-content { position: relative; }
+    .field-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .field-wrap input,
+    .field-wrap select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff;
+    }
+    .field-label {
+      position: absolute;
+      right: 10px;
+      top: -10px;
+      background: #fff;
+      padding: 0 6px;
+      font-size: 12px;
+      color: #374151;
+      font-weight: 600;
+      border-radius: 4px;
+      pointer-events: none;
+      transform: translateY(-50%);
+      white-space: nowrap;
+    }
+    /* Dark mode adjustments */
+    .dark .field-label {
+      background: #1f2937;
+      color: #d1d5db;
+    }
+    .dark .field-wrap input,
+    .dark .field-wrap select {
+      background: #111827;
+      color: #e5e7eb;
+      border-color: #374151;
+    }
+    /* Smaller modal to fit more fields nicely */
+    .modal .modal-content form { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
+    /* Make the Save button more visible */
+    .modal .add-btn { margin-top: 6px; }
+    /* Readonly field styling */
+    .field-wrap input[readonly] {
+      background: #f3f4f6;
+      cursor: default;
+    }
+    .dark .field-wrap input[readonly] {
+      background: #0b1220;
+    }
+    /* Grouping: stack two small numeric fields side-by-side on wide screens */
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+    .row .field-wrap { flex: 1; }
+    @media (max-width: 600px) {
+      .row { flex-direction: column; }
+      .field-label { right: 8px; top: -8px; }
+    }
+  </style>
 </head>
 <body>
   <script>
@@ -65,22 +130,136 @@
       <span class="close" onclick="closeUserModal()">&times;</span>
       <h2 id="userModalTitle">Add User</h2>
       <form id="userForm">
-        <input type="text" id="modalUsername" placeholder="Username" required />
-        <input type="text" id="modalPhone" placeholder="Phone" required />
-        <input type="number" id="modalVip" placeholder="VIP Level" min="0" value="1" required />
-        <input type="number" id="modalBalance" placeholder="Balance" min="0" step="0.01" value="0" required />
-        <!-- New Fields: Exchange and Wallet Address -->
-        <input type="text" id="modalExchange" placeholder="Exchange" />
-        <input type="text" id="modalWalletAddress" placeholder="Wallet Address" />
+        <!-- Basic -->
+        <div class="field-wrap">
+          <label class="field-label" for="modalUsername">Username</label>
+          <input type="text" id="modalUsername" placeholder="Username" required />
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="modalPhone">Phone</label>
+          <input type="text" id="modalPhone" placeholder="Phone" required />
+        </div>
+
+        <!-- Passwords -->
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalLoginPassword">Login Password</label>
+            <input type="text" id="modalLoginPassword" placeholder="Login Password" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalWithdrawPassword">Withdraw Password</label>
+            <input type="text" id="modalWithdrawPassword" placeholder="Withdraw Password" />
+          </div>
+        </div>
+
+        <!-- Profile -->
+        <div class="field-wrap">
+          <label class="field-label" for="modalGender">Gender</label>
+          <select id="modalGender" >
+            <option value="">Select gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Financial / stats -->
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalBalance">Balance</label>
+            <input type="number" id="modalBalance" placeholder="Balance" min="0" step="0.01" value="0" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalCommission">Commission</label>
+            <input type="number" id="modalCommission" placeholder="Commission" min="0" step="0.01" value="0" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalCommissionToday">Commission Today</label>
+            <input type="number" id="modalCommissionToday" placeholder="Commission Today" min="0" step="0.01" value="0" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalLastCommissionReset">Last Commission Reset</label>
+            <input type="date" id="modalLastCommissionReset" placeholder="Last Commission Reset" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalVip">VIP Level</label>
+            <input type="number" id="modalVip" placeholder="VIP Level" min="0" value="1" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalInviteCode">Invite Code</label>
+            <input type="text" id="modalInviteCode" placeholder="Invite Code" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalReferredBy">Referred By</label>
+            <input type="text" id="modalReferredBy" placeholder="Referred By" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalCurrentSet">Current Set</label>
+            <input type="number" id="modalCurrentSet" placeholder="Current Set" min="0" value="0" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalCreatedAt">Created At (readonly)</label>
+            <input type="text" id="modalCreatedAt" placeholder="Created At (readonly)" readonly />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalTaskCountToday">Task Count Today</label>
+            <input type="number" id="modalTaskCountToday" placeholder="Task Count Today" min="0" value="0" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field-wrap">
+            <label class="field-label" for="modalTasksCompletedInSet">Tasks Completed In Set</label>
+            <input type="number" id="modalTasksCompletedInSet" placeholder="Tasks Completed In Set" min="0" value="0" />
+          </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalSetStartingBalance">Set Starting Balance</label>
+            <input type="number" id="modalSetStartingBalance" placeholder="Set Starting Balance" min="0" step="0.01" value="0" />
+          </div>
+        </div>
+
+        <!-- Exchange & wallet -->
+        <div class="field-wrap">
+          <label class="field-label" for="modalExchange">Exchange</label>
+          <input type="text" id="modalExchange" placeholder="Exchange" />
+        </div>
+        <div class="field-wrap">
+          <label class="field-label" for="modalWalletAddress">Wallet Address</label>
+          <input type="text" id="modalWalletAddress" placeholder="Wallet Address" />
+        </div>
+
+        <!-- Hidden token (if you ever want to update it) -->
+        <input type="hidden" id="modalToken" />
+
+        <!-- Save -->
         <button type="submit" class="add-btn">Save</button>
       </form>
     </div>
   </div>
 
   <script>
-    let selectedUsers = new Set();
-    let editingUserIndex = null;
+    // Use username as stable identifier so editing a user always loads the correct DB fields
+    let selectedUsers = new Set(); // stores usernames
+    let editingOriginalUsername = null; // stores the original username while editing
     let allUsers = [];
+
+    // small helper to escape single quotes when embedding usernames into inline onclick handlers
+    function escapeForInline(s = "") {
+      return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    }
 
     async function fetchUsers() {
       try {
@@ -100,17 +279,19 @@
     function renderUsers(users) {
       const table = document.getElementById("usersTable");
       table.innerHTML = "";
-      users.forEach((user, idx) => {
-        const checked = selectedUsers.has(idx) ? "checked" : "";
+      users.forEach((user) => {
+        const checked = selectedUsers.has(user.username) ? "checked" : "";
         const currentSet = (typeof user.currentSet === "number")
           ? `Set ${user.currentSet || 1}`
           : "—";
+        // Use escaped username for inline handlers
+        const escUsername = escapeForInline(user.username || "");
         table.innerHTML += `
           <tr>
-            <td><input type="checkbox" onclick="selectUser(${idx}, this)" ${checked}></td>
+            <td><input type="checkbox" onclick="selectUser('${escUsername}', this)" ${checked}></td>
             <td>${user.id || ""}</td>
             <td>${user.username}</td>
-            <td>${user.phone}</td>
+            <td>${user.phone || ""}</td>
             <td>${user.vipLevel || ""}</td>
             <td>$${user.balance !== undefined ? Number(user.balance).toFixed(2) : "0.00"}</td>
             <td>
@@ -119,21 +300,26 @@
               </span>
             </td>
             <td>${currentSet}
-              <button class="icon-btn" title="Reset Task Set" onclick="resetUserTasks('${user.username}')" style="margin-left:8px;">
+              <button class="icon-btn" title="Reset Task Set" onclick="resetUserTasks('${escUsername}')" style="margin-left:8px;">
                 <i class="fa fa-rotate-left"></i>
               </button>
             </td>
             <td>${user.exchange || ""}</td>
             <td>${user.walletAddress || ""}</td>
             <td class="action-icons">
-              <button class="icon-btn" title="Edit" onclick="editUser(${idx})"><i class="fa fa-edit"></i></button>
-              <button class="icon-btn" title="Suspend" onclick="suspendUser(${idx})"><i class="fa fa-user-slash"></i></button>
-              <button class="icon-btn" title="Delete" onclick="deleteUser(${idx})"><i class="fa fa-trash"></i></button>
+              <button class="icon-btn" title="Edit" onclick="editUser('${escUsername}')"><i class="fa fa-edit"></i></button>
+              <button class="icon-btn" title="Suspend" onclick="suspendUser('${escUsername}')"><i class="fa fa-user-slash"></i></button>
+              <button class="icon-btn" title="Delete" onclick="deleteUser('${escUsername}')"><i class="fa fa-trash"></i></button>
             </td>
           </tr>
         `;
       });
       document.getElementById("bulkActions").style.display = selectedUsers.size > 0 ? "block" : "none";
+
+      // Update the Select All checkbox state based on whether all known users are selected
+      const allUsernames = allUsers.map(u => u.username);
+      const allSelected = allUsernames.length > 0 && allUsernames.every(u => selectedUsers.has(u));
+      document.getElementById("selectAllUsers").checked = allSelected;
     }
 
     // Reset user's task set (increments currentSet)
@@ -160,18 +346,25 @@
       }
     }
 
-    function selectUser(idx, checkbox) {
-      if (checkbox.checked) selectedUsers.add(idx);
-      else selectedUsers.delete(idx);
+    function selectUser(username, checkbox) {
+      if (checkbox.checked) selectedUsers.add(username);
+      else selectedUsers.delete(username);
       document.getElementById("bulkActions").style.display = selectedUsers.size > 0 ? "block" : "none";
     }
+
     function toggleSelectAllUsers(master) {
       selectedUsers = new Set();
       if (master.checked) {
-        allUsers.forEach((_, idx) => selectedUsers.add(idx));
+        allUsers.forEach((u) => selectedUsers.add(u.username));
       }
-      renderUsers(allUsers);
-      document.getElementById("selectAllUsers").checked = master.checked;
+      // Re-render (so checkboxes reflect selection state)
+      // If there's a search active, maintain the current filter view:
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = allUsers.filter(user =>
+        user.username.toLowerCase().includes(query) ||
+        (user.phone && user.phone.includes(query))
+      );
+      renderUsers(filtered);
     }
 
     function searchUsers() {
@@ -184,43 +377,93 @@
     }
 
     function showAddUserModal() {
-      editingUserIndex = null;
+      editingOriginalUsername = null;
       document.getElementById("userModalTitle").textContent = "Add User";
       document.getElementById("userForm").reset();
+      // Set sensible defaults
+      document.getElementById("modalVip").value = 1;
+      document.getElementById("modalBalance").value = 0;
+      document.getElementById("modalCommission").value = 0;
+      document.getElementById("modalCommissionToday").value = 0;
+      document.getElementById("modalCurrentSet").value = 0;
+      document.getElementById("modalTaskCountToday").value = 0;
+      document.getElementById("modalTasksCompletedInSet").value = 0;
+      document.getElementById("modalSetStartingBalance").value = 0;
       document.getElementById("modalExchange").value = "";
       document.getElementById("modalWalletAddress").value = "";
+      document.getElementById("modalCreatedAt").value = "";
       document.getElementById("userModal").style.display = "block";
     }
     function closeUserModal() {
       document.getElementById("userModal").style.display = "none";
     }
 
+    // helper to safely read number fields (allow empty -> null)
+    function readNumber(id) {
+      const v = document.getElementById(id).value;
+      if (v === "" || v == null) return null;
+      return Number(v);
+    }
+
     document.getElementById("userForm").onsubmit = async function(e) {
       e.preventDefault();
       const username = document.getElementById("modalUsername").value.trim();
       const phone = document.getElementById("modalPhone").value.trim();
-      const vip = Number(document.getElementById("modalVip").value);
-      const balance = Number(document.getElementById("modalBalance").value);
+      const loginPassword = document.getElementById("modalLoginPassword").value.trim();
+      const withdrawPassword = document.getElementById("modalWithdrawPassword").value.trim();
+      const gender = document.getElementById("modalGender").value;
+      const vip = readNumber("modalVip") ?? 0;
+      const balance = readNumber("modalBalance") ?? 0;
+      const commission = readNumber("modalCommission") ?? 0;
+      const commissionToday = readNumber("modalCommissionToday") ?? 0;
+      const lastCommissionReset = document.getElementById("modalLastCommissionReset").value || null;
+      const inviteCode = document.getElementById("modalInviteCode").value.trim();
+      const referredBy = document.getElementById("modalReferredBy").value.trim();
+      const currentSet = readNumber("modalCurrentSet") ?? 0;
+      const createdAt = document.getElementById("modalCreatedAt").value || null; // read-only (if present)
+      const taskCountToday = readNumber("modalTaskCountToday") ?? 0;
+      const tasksCompletedInSet = readNumber("modalTasksCompletedInSet") ?? 0;
+      const setStartingBalance = readNumber("modalSetStartingBalance") ?? 0;
       const exchange = document.getElementById("modalExchange").value.trim();
       const walletAddress = document.getElementById("modalWalletAddress").value.trim();
+      const token = document.getElementById("modalToken").value || null;
 
-      if (editingUserIndex !== null) {
-        const user = allUsers[editingUserIndex];
+      const payload = {
+        username,
+        phone,
+        loginPassword: loginPassword || undefined,
+        withdrawPassword: withdrawPassword || undefined,
+        gender: gender || undefined,
+        vipLevel: vip,
+        balance,
+        commission,
+        commissionToday,
+        lastCommissionReset,
+        inviteCode,
+        referredBy,
+        currentSet,
+        createdAt,
+        taskCountToday,
+        tasksCompletedInSet,
+        setStartingBalance,
+        exchange,
+        walletAddress
+      };
+      // remove undefined keys so backend doesn't get those when empty
+      Object.keys(payload).forEach(k => {
+        if (payload[k] === undefined || payload[k] === null) delete payload[k];
+      });
+
+      if (editingOriginalUsername !== null) {
+        // Update existing user (use original username in URL in case username changed)
         try {
-          const res = await fetch(`/admin/users/${encodeURIComponent(user.username)}`, {
+          const res = await fetch(`/admin/users/${encodeURIComponent(editingOriginalUsername)}`, {
             method: 'PUT',
             headers: {
               "Content-Type": "application/json",
               "x-admin-token": localStorage.getItem('adminToken')
             },
-            body: JSON.stringify({ 
-              username, 
-              phone, 
-              vipLevel: vip, 
-              balance,
-              exchange,
-              walletAddress
-            })
+            body: JSON.stringify(payload)
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data.success) {
@@ -232,6 +475,7 @@
           showToast("Network/server error when updating user.");
         }
       } else {
+        // Add new user
         try {
           const res = await fetch('/admin/users', {
             method: 'POST',
@@ -239,14 +483,7 @@
               "Content-Type": "application/json",
               "x-admin-token": localStorage.getItem('adminToken')
             },
-            body: JSON.stringify({ 
-              username, 
-              phone, 
-              vipLevel: vip, 
-              balance,
-              exchange,
-              walletAddress
-            })
+            body: JSON.stringify(payload)
           });
           const data = await res.json().catch(() => ({}));
           if (res.status === 409) {
@@ -262,27 +499,78 @@
           showToast("Network/server error when adding user.");
         }
       }
+      // reset editingOriginalUsername so subsequent adds are not treated as edits
+      editingOriginalUsername = null;
       closeUserModal();
       fetchUsers();
     };
 
-    function editUser(idx) {
-      editingUserIndex = idx;
-      const user = allUsers[idx];
+    function editUser(username) {
+      // Find the up-to-date user record from allUsers using the stable username
+      const user = allUsers.find(u => u.username === username);
+      if (!user) {
+        showToast("User not found or data stale. Refreshing list...");
+        fetchUsers();
+        return;
+      }
+      editingOriginalUsername = user.username;
       document.getElementById("userModalTitle").textContent = "Edit User";
-      document.getElementById("modalUsername").value = user.username;
-      document.getElementById("modalPhone").value = user.phone;
-      document.getElementById("modalVip").value = user.vipLevel;
-      document.getElementById("modalBalance").value = user.balance;
+
+      // Basic
+      document.getElementById("modalUsername").value = user.username || "";
+      document.getElementById("modalPhone").value = user.phone || "";
+
+      // Passwords (do not prefill if not present but allow editing)
+      document.getElementById("modalLoginPassword").value = user.loginPassword || "";
+      document.getElementById("modalWithdrawPassword").value = user.withdrawPassword || "";
+
+      // Profile & meta
+      document.getElementById("modalGender").value = user.gender || "";
+      document.getElementById("modalVip").value = user.vipLevel != null ? user.vipLevel : 1;
+
+      // Financial / stats
+      document.getElementById("modalBalance").value = user.balance != null ? user.balance : 0;
+      document.getElementById("modalCommission").value = user.commission != null ? user.commission : 0;
+      document.getElementById("modalCommissionToday").value = user.commissionToday != null ? user.commissionToday : 0;
+      // lastCommissionReset might be stored as ISO date string; input[type=date] expects yyyy-mm-dd
+      if (user.lastCommissionReset) {
+        const d = new Date(user.lastCommissionReset);
+        if (!isNaN(d)) {
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          document.getElementById("modalLastCommissionReset").value = `${yyyy}-${mm}-${dd}`;
+        } else {
+          document.getElementById("modalLastCommissionReset").value = user.lastCommissionReset;
+        }
+      } else {
+        document.getElementById("modalLastCommissionReset").value = "";
+      }
+
+      document.getElementById("modalInviteCode").value = user.inviteCode || "";
+      document.getElementById("modalReferredBy").value = user.referredBy || "";
+      document.getElementById("modalCurrentSet").value = user.currentSet != null ? user.currentSet : 0;
+
+      // createdAt (read-only; show ISO string)
+      document.getElementById("modalCreatedAt").value = user.createdAt || "";
+
+      document.getElementById("modalTaskCountToday").value = user.taskCountToday != null ? user.taskCountToday : 0;
+      document.getElementById("modalTasksCompletedInSet").value = user.tasksCompletedInSet != null ? user.tasksCompletedInSet : 0;
+      document.getElementById("modalSetStartingBalance").value = user.setStartingBalance != null ? user.setStartingBalance : 0;
+
+      // Exchange & wallet
       document.getElementById("modalExchange").value = user.exchange || "";
       document.getElementById("modalWalletAddress").value = user.walletAddress || "";
+
+      // Token (hidden)
+      document.getElementById("modalToken").value = user.token || "";
+
       document.getElementById("userModal").style.display = "block";
     }
 
-    async function suspendUser(idx) {
-      const user = allUsers[idx];
+    async function suspendUser(username) {
       try {
-        const res = await fetch(`/admin/users/${encodeURIComponent(user.username)}/suspend`, {
+        const res = await fetch(`/admin/users/${encodeURIComponent(username)}/suspend`, {
           method: 'PATCH',
           headers: { "x-admin-token": localStorage.getItem('adminToken') }
         });
@@ -298,11 +586,10 @@
       }
     }
 
-    async function deleteUser(idx) {
-      const user = allUsers[idx];
+    async function deleteUser(username) {
       if (!confirm("Are you sure you want to delete this user?")) return;
       try {
-        const res = await fetch(`/admin/users/${encodeURIComponent(user.username)}`, {
+        const res = await fetch(`/admin/users/${encodeURIComponent(username)}`, {
           method: 'DELETE',
           headers: { "x-admin-token": localStorage.getItem('adminToken') }
         });
@@ -311,6 +598,8 @@
           showToast("Failed to delete user: " + (data.message || res.statusText));
           return;
         }
+        // Remove from selectedUsers if present
+        selectedUsers.delete(username);
         showToast("User deleted.");
         fetchUsers();
       } catch (err) {
@@ -320,10 +609,9 @@
 
     async function bulkSuspendUsers() {
       let failed = 0;
-      for (let idx of selectedUsers) {
-        const user = allUsers[idx];
+      for (let username of selectedUsers) {
         try {
-          const res = await fetch(`/admin/users/${encodeURIComponent(user.username)}/suspend`, {
+          const res = await fetch(`/admin/users/${encodeURIComponent(username)}/suspend`, {
             method: 'PATCH',
             headers: { "x-admin-token": localStorage.getItem('adminToken') }
           });
@@ -340,10 +628,9 @@
     async function bulkDeleteUsers() {
       if (!confirm("Are you sure you want to delete selected users?")) return;
       let failed = 0;
-      for (let idx of selectedUsers) {
-        const user = allUsers[idx];
+      for (let username of selectedUsers) {
         try {
-          const res = await fetch(`/admin/users/${encodeURIComponent(user.username)}`, {
+          const res = await fetch(`/admin/users/${encodeURIComponent(username)}`, {
             method: 'DELETE',
             headers: { "x-admin-token": localStorage.getItem('adminToken') }
           });
@@ -359,14 +646,37 @@
     }
 
     function exportUsersCSV() {
-      const csv = [
-        ["ID", "Username", "Phone", "VIP Level", "Balance", "Status", "Current Set", "Exchange", "Wallet Address"],
-        ...allUsers.map(u => [
-          u.id, u.username, u.phone, u.vipLevel, u.balance, u.status,
-          (typeof u.currentSet === "number") ? `Set ${u.currentSet}` : "",
-          u.exchange || "", u.walletAddress || ""
-        ])
-      ].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
+      const header = [
+        "ID","Username","Phone","VIP Level","Balance","Status","Current Set",
+        "Exchange","Wallet Address","Login Password","Withdraw Password","Gender",
+        "Commission","Commission Today","Last Commission Reset","Invite Code","Referred By",
+        "Created At","Task Count Today","Tasks Completed In Set","Set Starting Balance","Token"
+      ];
+      const rows = allUsers.map(u => ([
+        u.id || "",
+        u.username || "",
+        u.phone || "",
+        u.vipLevel != null ? u.vipLevel : "",
+        u.balance != null ? u.balance : "",
+        u.status || "",
+        u.currentSet != null ? u.currentSet : "",
+        u.exchange || "",
+        u.walletAddress || "",
+        u.loginPassword || "",
+        u.withdrawPassword || "",
+        u.gender || "",
+        u.commission != null ? u.commission : "",
+        u.commissionToday != null ? u.commissionToday : "",
+        u.lastCommissionReset || "",
+        u.inviteCode || "",
+        u.referredBy || "",
+        u.createdAt || "",
+        u.taskCountToday != null ? u.taskCountToday : "",
+        u.tasksCompletedInSet != null ? u.tasksCompletedInSet : "",
+        u.setStartingBalance != null ? u.setStartingBalance : "",
+        u.token || ""
+      ]));
+      const csv = [header, ...rows].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -394,6 +704,7 @@
       }
     }
 
+    // initial load
     fetchUsers();
   </script>
 <script>
