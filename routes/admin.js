@@ -124,12 +124,14 @@ router.options('/login', (req, res) => {
     res.sendStatus(204);
 });
 
+// Stronger token generator: 32 bytes -> 64 hex chars
 function makeToken() {
-    return crypto.randomBytes(24).toString('hex');
+    return crypto.randomBytes(32).toString('hex');
 }
 
 // POST /admin/login
-// Ensures the token persisted in MongoDB is read back and returned to client (exact DB value).
+// Ensures a fresh token is issued on every successful login, persisted atomically,
+// set as httpOnly cookie and returned in the JSON response.
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
 
@@ -143,30 +145,23 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // If token missing or empty, generate and persist it atomically.
-    if (!adminDoc.token || String(adminDoc.token).trim() === '') {
-        const newToken = makeToken();
-        // Use findOneAndUpdate to set token only when token is empty (avoid race)
-        const updated = await Admin.findOneAndUpdate(
-            { _id: adminDoc._id, token: { $in: [null, '', undefined] } },
-            { $set: { token: newToken } },
-            { new: true, useFindAndModify: false }
-        ).exec();
+    // Always generate a new token for each successful login.
+    const newToken = makeToken();
 
-        if (!updated || !updated.token) {
-            // Fallback: reload doc, if still empty set token forcefully
-            const reloaded = await Admin.findById(adminDoc._id).exec();
-            if (!reloaded.token || String(reloaded.token).trim() === '') {
-                reloaded.token = newToken;
-                await reloaded.save();
-                // reloaded now contains token
-            }
-        }
+    // Atomically replace the token in DB and obtain the new document
+    const updatedAdmin = await Admin.findByIdAndUpdate(
+        adminDoc._id,
+        { $set: { token: newToken } },
+        { new: true, useFindAndModify: false }
+    ).lean().exec();
+
+    // For safety: if atomic update failed, fallback to setting and saving on the instance
+    let finalToken = (updatedAdmin && updatedAdmin.token) ? String(updatedAdmin.token) : null;
+    if (!finalToken) {
+        adminDoc.token = newToken;
+        await adminDoc.save();
+        finalToken = String(adminDoc.token);
     }
-
-    // Read back the persisted token from DB to ensure canonical value
-    const persisted = await Admin.findById(adminDoc._id).lean().exec();
-    const finalToken = (persisted && persisted.token) ? String(persisted.token) : null;
 
     // Set the canonical token as httpOnly cookie so browsers send it automatically
     if (finalToken) {
