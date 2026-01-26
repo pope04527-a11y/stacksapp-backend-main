@@ -437,73 +437,11 @@
 </head>
 <body>
   <script>
-    (function(){
-      // Inline admin auth helper (used across admin pages)
-      function getToken(){
-        return localStorage.getItem('stacksAdminToken') || localStorage.getItem('adminToken') || null;
-      }
-
-      function requireAuth(){
-        const t = getToken();
-        if (!t) {
-          alert('Access denied. Please login.');
-          window.location.href = '/admin-panel/login.html';
-        }
-        return t;
-      }
-
-      async function authFetch(url, opts){
-        opts = Object.assign({}, opts || {});
-        opts.headers = Object.assign({}, opts.headers || {});
-
-        const token = getToken();
-        if (token) {
-          opts.headers['x-admin-token'] = token;
-          if (!opts.headers['Authorization'] && !opts.headers['authorization']) {
-            opts.headers['Authorization'] = 'Bearer ' + token;
-          }
-        }
-
-        opts.credentials = 'include';
-
-        if (opts.body && !opts.headers['Content-Type'] && !(opts.body instanceof FormData)) {
-          opts.headers['Content-Type'] = 'application/json';
-        }
-
-        let res;
-        try {
-          res = await fetch(url, opts);
-        } catch (err) {
-          throw err;
-        }
-
-        if (res.status === 401 || res.status === 403) {
-          try {
-            localStorage.removeItem('stacksAdminToken');
-            localStorage.removeItem('adminToken');
-            document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-          } catch(e){}
-          window.location.href = '/admin-panel/login.html';
-          const err = new Error('Unauthorized');
-          err.status = res.status;
-          throw err;
-        }
-
-        return res;
-      }
-
-      window.requireAuth = requireAuth;
-      window.authFetch = authFetch;
-      window.getAdminToken = getToken;
-
-      // Immediately require auth when script loads
-      requireAuth();
-    })();
-  </script>
-  <script>
-    // Prefer dedicated key 'stacksAdminToken' to avoid collisions; fallback to legacy 'adminToken'
-    // The inline auth helper above already redirects if missing token.
-
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      alert("Access denied. Please login.");
+      window.location.href = "/admin-panel/login.html";
+    }
     if (localStorage.getItem("adminDarkMode") === "true") {
       document.documentElement.classList.add("dark");
       document.body.classList.add("dark");
@@ -724,54 +662,26 @@
       });
     });
 
-    // Safe DOM setter
-    function safeSetText(id, value) {
-      try {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
-      } catch (e) {
-        console.warn('safeSetText failed for', id, e && e.message ? e.message : e);
-      }
-    }
-
-    // Real-time dashboard stats: fetch from backend (use authFetch)
+    // Real-time dashboard stats: fetch from backend
     async function updateDashboardStats() {
       try {
-        const fetcher = (typeof authFetch === 'function') ? authFetch : async (u, o) => fetch(u, Object.assign({ credentials: 'include' }, o));
-        const [usersRes, balanceRes, tasksRes, withdrawalsRes] = await Promise.allSettled([
-          fetcher('/admin/total-users'),
-          fetcher('/admin/total-balance'),
-          fetcher('/admin/active-tasks'),
-          fetcher('/admin/pending-withdrawals'),
+        // IMPORTANT: Use 'x-admin-token' for all requests!
+        const headers = { 'x-admin-token': localStorage.getItem("adminToken") };
+        const [users, balance, tasks, withdrawals] = await Promise.all([
+          fetch('/admin/total-users', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
+          fetch('/admin/total-balance', { headers }).then(r=>r.json()).catch(()=>({total:"-"})),
+          fetch('/admin/active-tasks', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
+          fetch('/admin/pending-withdrawals', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
         ]);
-
-        let users = { count: '-' };
-        let balance = { total: '-' };
-        let tasks = { count: '-' };
-        let withdrawals = { count: '-' };
-
-        if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
-          users = await usersRes.value.json();
-        }
-        if (balanceRes.status === 'fulfilled' && balanceRes.value.ok) {
-          balance = await balanceRes.value.json();
-        }
-        if (tasksRes.status === 'fulfilled' && tasksRes.value.ok) {
-          tasks = await tasksRes.value.json();
-        }
-        if (withdrawalsRes.status === 'fulfilled' && withdrawalsRes.value.ok) {
-          withdrawals = await withdrawalsRes.value.json();
-        }
-
-        safeSetText("totalUsers", users.count ?? "-");
-        safeSetText("totalBalance", (balance.total ? `$${balance.total}` : "-"));
-        safeSetText("activeTasks", tasks.count ?? "-");
-        safeSetText("pendingWithdrawals", withdrawals.count ?? "-");
+        document.getElementById("totalUsers").textContent = users.count ?? "-";
+        document.getElementById("totalBalance").textContent = balance.total ? `$${balance.total}` : "-";
+        document.getElementById("activeTasks").textContent = tasks.count ?? "-";
+        document.getElementById("pendingWithdrawals").textContent = withdrawals.count ?? "-";
       } catch(e) {
-        safeSetText("totalUsers", "-");
-        safeSetText("totalBalance", "-");
-        safeSetText("activeTasks", "-");
-        safeSetText("pendingWithdrawals", "-");
+        document.getElementById("totalUsers").textContent = "-";
+        document.getElementById("totalBalance").textContent = "-";
+        document.getElementById("activeTasks").textContent = "-";
+        document.getElementById("pendingWithdrawals").textContent = "-";
       }
     }
 
@@ -835,11 +745,7 @@
 
     // Logout
     function logout() {
-      try {
-        localStorage.removeItem('stacksAdminToken');
-        localStorage.removeItem('adminToken');
-        document.cookie = 'stacksAdminToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-      } catch(e){}
+      localStorage.removeItem("adminToken");
       window.location.href = "/admin-panel/login.html";
     }
 
@@ -935,45 +841,30 @@
       cancelBtn && cancelBtn.addEventListener('click', hideModal);
 
       async function getAdminTokenPrompt() {
-        let token = null;
-        try {
-          token = window.getAdminToken ? window.getAdminToken() : (localStorage.getItem('stacksAdminToken') || localStorage.getItem('adminToken'));
-        } catch(e){}
+        let token = localStorage.getItem('adminToken');
         if (!token) {
           token = prompt('Paste admin token from login (will be saved in localStorage for this browser).');
-          if (token) {
-            localStorage.setItem('stacksAdminToken', token);
-            localStorage.setItem('adminToken', token);
-            try { document.cookie = `stacksAdminToken=${token}; path=/; max-age=${60*60*24*30}; samesite=lax`; } catch(e){}
-          }
+          if (token) localStorage.setItem('adminToken', token);
         }
         return token;
       }
 
       async function createMinimalUser(token, payload) {
-        if (typeof authFetch === 'function') {
-          return (await authFetch('/admin/users', { method: 'POST', body: JSON.stringify(payload) })).json();
-        } else {
-          const res = await fetch('/admin/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
-            body: JSON.stringify(payload)
-          });
-          return res.json();
-        }
+        const res = await fetch('/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+          body: JSON.stringify(payload)
+        });
+        return res.json();
       }
 
       async function updateUserFields(token, username, updates) {
-        if (typeof authFetch === 'function') {
-          return (await authFetch('/admin/user/' + encodeURIComponent(username), { method: 'PUT', body: JSON.stringify({ action: 'edit', updates }) })).json();
-        } else {
-          const res = await fetch('/admin/user/' + encodeURIComponent(username), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
-            body: JSON.stringify({ action: 'edit', updates })
-          });
-          return res.json();
-        }
+        const res = await fetch('/admin/user/' + encodeURIComponent(username), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+          body: JSON.stringify({ action: 'edit', updates })
+        });
+        return res.json();
       }
 
       form.addEventListener('submit', async (ev) => {
@@ -998,6 +889,7 @@
             return;
           }
 
+          // create minimal user
           const createPayload = { username, phone, vipLevel: 1, balance: 0 };
           const createResp = await createMinimalUser(token, createPayload);
           if (createResp && createResp.success === false && createResp.message && !createResp.message.toLowerCase().includes('exists')) {
