@@ -1,15 +1,11 @@
 /**
  * routes/admin.js
  *
- * Full file with login/token handling tightened so the exact persisted token is returned
- * and stored by the admin panel client. Other routes are preserved.
+ * Updated admin routes with added /add-balance handler and defensive id handling.
+ * Replace your existing routes/admin.js with this file and restart the server.
  *
- * Replace existing routes/admin.js with this file and restart the server.
- *
- * NOTE: This version keeps the transactional logic but also includes a safe
- * non-transactional fallback for MongoDB deployments that are not replica sets.
- * That ensures approve/reject operations won't throw on standalone servers and
- * will behave atomically where transactions are available.
+ * NOTE: This file is based on the version you provided and only inserts the
+ * add-balance endpoint (safe) and keeps existing behavior otherwise.
  */
 
 const express = require('express');
@@ -51,8 +47,7 @@ cloudinary.config({
 function asyncHandler(fn) {
     return function (req, res, next) {
         Promise.resolve(fn(req, res, next)).catch((e) => {
-            console.error(e);
-            // If the thrown object contains a status property, use it (used below in transactions)
+            console.error(e && (e.stack || e.message) ? (e.stack || e.message) : e);
             if (e && e.status && typeof e.status === 'number') {
                 return res.status(e.status).json({ success: false, message: e.message || 'Error' });
             }
@@ -139,8 +134,6 @@ function makeToken() {
 }
 
 // POST /admin/login
-// Ensures a fresh token is issued on every successful login, persisted atomically,
-// set as httpOnly cookie and returned in the JSON response.
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
 
@@ -157,15 +150,11 @@ router.post('/login', asyncHandler(async (req, res) => {
     // Always generate a new token for each successful login.
     const newToken = makeToken();
 
-    // Attempt to persist the token robustly:
-    // 1) try updating by _id
-    // 2) fallback to updating by username
-    // 3) final fallback: reload document and save()
+    // Persist token with fallbacks
     let finalToken = null;
     let updatedAdmin = null;
 
     try {
-        // Best-effort: update by _id
         try {
             updatedAdmin = await Admin.findOneAndUpdate(
                 { _id: adminDoc._id },
@@ -173,12 +162,10 @@ router.post('/login', asyncHandler(async (req, res) => {
                 { new: true, useFindAndModify: false }
             ).lean().exec();
         } catch (e) {
-            // Log and continue to fallback
             console.warn('Admin token update by _id failed:', e && e.message ? e.message : e);
         }
 
         if (!updatedAdmin) {
-            // Fallback: update by username
             try {
                 updatedAdmin = await Admin.findOneAndUpdate(
                     { username: adminDoc.username },
@@ -193,14 +180,12 @@ router.post('/login', asyncHandler(async (req, res) => {
         if (updatedAdmin && updatedAdmin.token) {
             finalToken = String(updatedAdmin.token);
         } else {
-            // Final fallback: reload the document instance and save
             const reloaded = await Admin.findOne({ username: adminDoc.username }).exec();
             if (reloaded) {
                 reloaded.token = newToken;
                 await reloaded.save();
                 finalToken = String(reloaded.token);
             } else {
-                // Could not find the document to update — this is unexpected
                 console.error('Failed to persist admin token: admin document not found by id or username', { id: adminDoc._id, username: adminDoc.username });
                 return res.status(500).json({ success: false, message: 'Failed to persist token' });
             }
@@ -210,7 +195,7 @@ router.post('/login', asyncHandler(async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to persist token' });
     }
 
-    // Set the canonical token as httpOnly cookie so browsers send it automatically
+    // Set cookie
     if (finalToken) {
         try {
             res.cookie('stacksAdminToken', finalToken, {
@@ -228,7 +213,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
 
-    // Return the exact persisted token in JSON (guaranteed to match DB)
+    // Return the exact persisted token in JSON
     return res.json({ success: true, token: finalToken });
 }));
 
@@ -258,7 +243,6 @@ router.get('/token', asyncHandler(async (req, res) => {
 router.get('/settings.js', (req, res) => {
     const filePath = path.join(__dirname, '..', 'public', 'admin-panel', 'js', 'settings.js');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    // prevent aggressive caching so admin gets latest script after deployments
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.sendFile(filePath, (err) => {
         if (err) {
@@ -271,11 +255,9 @@ router.get('/settings.js', (req, res) => {
 // ----------------------- Middleware: Protect All Other Admin Routes -----------------------
 async function verifyAdminToken(req, res, next) {
     try {
-        // Prefer token from httpOnly cookie 'stacksAdminToken'
         let token = null;
         if (req.cookies && req.cookies.stacksAdminToken) token = String(req.cookies.stacksAdminToken);
 
-        // fallback: accept from Authorization: Bearer <token>, x-admin-token or x-auth-token headers
         if (!token) {
             const headerAuth = req.headers['authorization'] || '';
             const headerAdmin = req.headers['x-admin-token'] || req.headers['X-Admin-Token'] || '';
@@ -296,17 +278,14 @@ async function verifyAdminToken(req, res, next) {
 
         token = token.trim().replace(/^"|"$/g, '');
 
-        // debug: log the incoming token (temporary)
         console.debug('verifyAdminToken - incoming token:', token);
 
-        // try Admin collection (canonical)
         const adminDoc = await Admin.findOne({ token }).lean().exec();
         if (adminDoc) {
             req.admin = adminDoc;
             return next();
         }
 
-        // fallback: try a User with username "admin" that stores token (legacy)
         const userDoc = await User.findOne({ username: "admin", token }).lean().exec();
         if (userDoc) {
             req.admin = userDoc;
@@ -342,7 +321,6 @@ router.get('/settings-public', asyncHandler(async (_, res) => {
     if (!settings.service) {
         settings.service = { whatsapp: "", telegram: "" };
     }
-    // Prevent caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -490,7 +468,6 @@ async function approveWithdrawalFallback(id, processedBy, adminNote) {
     ).lean().exec();
 
     if (!updated) {
-        // Check if withdrawal exists but not pending
         const exists = await Withdrawal.findOne({ _id: id }).lean().exec();
         if (!exists) {
             const err = new Error('Withdrawal not found');
@@ -565,11 +542,9 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
     }
 
-    // Compute processedBy string
     const processedBy = req.admin && (req.admin.username || req.admin._id) ? (req.admin.username || String(req.admin._id)) : 'system';
     const adminNote = req.body && typeof req.body.adminNote === 'string' ? req.body.adminNote : undefined;
 
-    // Try transactional path first (if supported). If any transactional APIs fail, fallback to atomic updates.
     let session;
     try {
         session = await mongoose.startSession();
@@ -578,7 +553,6 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
     }
 
     if (session && typeof session.withTransaction === 'function') {
-        // Attempt transactional flow, but catch and fallback on errors.
         try {
             let updatedWithdrawal = null;
             await session.withTransaction(async () => {
@@ -602,8 +576,6 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
                 if (adminNote) w.adminNote = adminNote;
                 await w.save({ session });
 
-                // Hook for extra transactional bookkeeping could be added here.
-
                 updatedWithdrawal = w.toObject();
             });
 
@@ -612,14 +584,12 @@ router.patch('/withdrawals/:id/approve', asyncHandler(async (req, res) => {
         } catch (err) {
             try { session.endSession(); } catch (e) {}
             console.warn('Transactional approve failed, falling back to non-transactional method:', err && err.message ? err.message : err);
-            // fall through to fallback logic below
         }
     } else {
         if (session) try { session.endSession(); } catch (e) {}
         console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for approve');
     }
 
-    // Fallback non-transactional path (atomic conditional update)
     try {
         const updated = await approveWithdrawalFallback(id, processedBy, adminNote);
         return res.json({ success: true, withdrawal: updated });
@@ -672,7 +642,6 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                 w.processedBy = processedBy;
                 if (adminNote) w.adminNote = adminNote;
 
-                // Optional refund logic
                 const amount = (typeof w.amount === 'number') ? w.amount : (w.amount ? Number(w.amount) : NaN);
                 let userQuery = null;
                 if (w.username) userQuery = { username: String(w.username) };
@@ -684,7 +653,6 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
                         userDoc.balance = (typeof userDoc.balance === 'number' ? userDoc.balance : 0) + amount;
                         await userDoc.save({ session });
                         refundedUser = { username: userDoc.username, balance: userDoc.balance };
-                        // optionally add Transaction record here inside the same transaction
                     } else {
                         console.warn('Rejecting withdrawal but user not found to refund (transactional):', userQuery);
                     }
@@ -699,14 +667,12 @@ router.patch('/withdrawals/:id/reject', asyncHandler(async (req, res) => {
         } catch (err) {
             try { session.endSession(); } catch (e) {}
             console.warn('Transactional reject failed, falling back to non-transactional method:', err && err.message ? err.message : err);
-            // fall through to fallback logic below
         }
     } else {
         if (session) try { session.endSession(); } catch (e) {}
         console.debug('Transactions not supported by MongoDB deployment — using non-transactional fallback for reject');
     }
 
-    // Fallback non-transactional path
     try {
         const { updated, refundedUser } = await rejectWithdrawalFallback(id, processedBy, adminNote);
         return res.json({ success: true, withdrawal: updated, refundedUser: refundedUser || null });
@@ -732,10 +698,9 @@ router.get('/settings', asyncHandler(async (_, res) => {
     // Ensure all fields are always present for the frontend
     settings.siteName = settings.siteName || "";
     settings.currency = settings.currency || "";
-    // New defaults for currencySymbol and decimals
     settings.currencySymbol = settings.currencySymbol || "";
     settings.currencyDecimals = (typeof settings.currencyDecimals === 'number') ? settings.currencyDecimals : 2;
-    settings.currencyPosition = settings.currencyPosition || "after"; // optional: "before" or "after"
+    settings.currencyPosition = settings.currencyPosition || "after";
 
     settings.defaultVip = settings.defaultVip || 1;
     settings.inviteBonus = settings.inviteBonus || 0;
@@ -746,7 +711,6 @@ router.get('/settings', asyncHandler(async (_, res) => {
     settings.minWithdraw = settings.minWithdraw || 0;
     settings.maxWithdraw = settings.maxWithdraw || 0;
 
-    // Normalise withdraw fee fields: support legacy `withdrawFee` and canonical `withdrawFeePercent`
     if (typeof settings.withdrawFeePercent === 'undefined' && typeof settings.withdrawFee !== 'undefined') {
         settings.withdrawFeePercent = settings.withdrawFee;
     }
@@ -772,12 +736,10 @@ router.get('/settings', asyncHandler(async (_, res) => {
         if (!Array.isArray(settings.activityLock.users)) settings.activityLock.users = [];
     }
 
-    // platform closing helpers (ensure naming consistency)
     settings.platformClosed = !!settings.platformClosed;
     settings.autoOpenHourUK = typeof settings.autoOpenHourUK === 'number' ? settings.autoOpenHourUK : 10;
     settings.whoCanAccessDuringClose = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
 
-    // Provide frontend-friendly aliases:
     const hour = Number(settings.autoOpenHourUK);
     if (!isNaN(hour) && hour >= 0 && hour <= 23) {
         const hh = String(hour).padStart(2, '0');
@@ -791,7 +753,6 @@ router.get('/settings', asyncHandler(async (_, res) => {
 }));
 
 router.post('/settings', asyncHandler(async (req, res) => {
-    // Debug logging to help ensure requests reach this handler and payloads are as-expected
     console.log('ADMIN POST /admin/settings called - x-admin-token:', req.headers['x-admin-token']);
     try {
         console.log('ADMIN POST /admin/settings payload (truncated):', JSON.stringify(req.body).slice(0, 1000));
@@ -800,11 +761,7 @@ router.post('/settings', asyncHandler(async (req, res) => {
     }
 
     const updates = req.body || {};
-
-    // Build an update document (use atomic findOneAndUpdate with upsert to avoid race/duplicate issues)
     const updateDoc = {};
-
-    // whitelisted simple fields
     const simpleFields = [
         "siteName", "currency", "currencySymbol", "currencyDecimals", "currencyPosition",
         "defaultVip", "inviteBonus", "telegramGroup",
@@ -816,13 +773,11 @@ router.post('/settings', asyncHandler(async (req, res) => {
         if (updates[key] !== undefined) updateDoc[key] = updates[key];
     }
 
-    // Ensure currencyDecimals is a number if provided
     if (updates.currencyDecimals !== undefined) {
         const parsed = Number(updates.currencyDecimals);
         updateDoc.currencyDecimals = Number.isFinite(parsed) ? parsed : 2;
     }
 
-    // withdraw fee normalization
     if (updates.withdrawFeePercent !== undefined) {
         const parsed = Number(updates.withdrawFeePercent);
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
@@ -831,13 +786,10 @@ router.post('/settings', asyncHandler(async (req, res) => {
         updateDoc.withdrawFeePercent = isNaN(parsed) ? 0 : parsed;
     }
 
-    // service merge (keep existing keys if not provided)
     if (updates.service && typeof updates.service === 'object') {
-        // We'll set service fully to provided object (merge on DB side)
         updateDoc.service = { ...(updates.service || {}) };
     }
 
-    // activityLock normalization
     if (updates.activityLock && typeof updates.activityLock === 'object') {
         const acl = {
             enabled: !!updates.activityLock.enabled,
@@ -851,12 +803,10 @@ router.post('/settings', asyncHandler(async (req, res) => {
         updateDoc.activityLock = acl;
     }
 
-    // platform closing controls
     if (updates.platformClosed !== undefined) {
         updateDoc.platformClosed = !!updates.platformClosed;
     }
 
-    // parse autoOpenTime "HH:MM" to autoOpenHourUK if provided
     if (updates.autoOpenHourUK !== undefined && !isNaN(Number(updates.autoOpenHourUK))) {
         updateDoc.autoOpenHourUK = Number(updates.autoOpenHourUK);
     } else if (typeof updates.autoOpenTime === 'string' && updates.autoOpenTime.trim()) {
@@ -867,7 +817,6 @@ router.post('/settings', asyncHandler(async (req, res) => {
         }
     }
 
-    // allowList / whoCanAccessDuringClose normalization
     if (updates.allowList !== undefined) {
         if (Array.isArray(updates.allowList)) {
             updateDoc.whoCanAccessDuringClose = updates.allowList.map(u => String(u || '').trim()).filter(Boolean);
@@ -897,7 +846,6 @@ router.post('/settings', asyncHandler(async (req, res) => {
         // leave untouched
     }
 
-    // Perform atomic update with upsert and return the new doc
     const saved = await Setting.findOneAndUpdate(
         {},
         { $set: updateDoc },
@@ -933,6 +881,40 @@ router.post('/users', asyncHandler(async (req, res) => {
     await User.create(user);
     res.json({ success: true, user });
 }));
+
+// ======= ADD-BALANCE: Admin endpoint to add balance and create transaction =======
+router.post('/add-balance', asyncHandler(async (req, res) => {
+    const { username, amount } = req.body;
+
+    if (!username) return res.status(400).json({ success: false, message: 'username is required' });
+    if (typeof amount === 'undefined') return res.status(400).json({ success: false, message: 'amount is required' });
+
+    const numAmount = Number(amount);
+    if (isNaN(numAmount)) return res.status(400).json({ success: false, message: 'amount must be a number' });
+
+    // Increment user's balance and return the updated document
+    const user = await User.findOneAndUpdate({ username }, { $inc: { balance: numAmount } }, { new: true }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Create a transaction record. Many schemas require userId — include it to avoid validation errors.
+    const newTransaction = {
+        user: username,
+        userId: user._id, // <-- ensure required field is present
+        type: "admin_add_balance",
+        amount: numAmount,
+        status: "Completed",
+        createdAt: new Date().toISOString()
+    };
+
+    try {
+      await Transaction.create(newTransaction);
+    } catch (e) {
+      console.warn('Failed to create transaction record for add-balance:', e && e.message ? e.message : e);
+    }
+
+    res.json({ success: true, balance: user.balance, user });
+}));
+
 router.put('/users/:username', asyncHandler(async (req, res) => {
     const { username } = req.params;
     const updates = req.body;
