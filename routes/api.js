@@ -667,18 +667,41 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         if (typeof user.currentSet !== "number") user.currentSet = 1;
         const userSet = user.currentSet || 1;
 
-        const tasks = await Task.find({ username: user.username }).lean();
+        // === Robust task counting: fetch tasks only for the current set (treat legacy docs without set as set 1) ===
+        let taskQuery;
+        if (userSet === 1) {
+          // include tasks with set === 1 OR missing set (legacy)
+          taskQuery = { username: user.username, $or: [{ set: 1 }, { set: { $exists: false } }] };
+        } else {
+          taskQuery = { username: user.username, set: userSet };
+        }
+        const tasks = await Task.find(taskQuery).lean();
+
+        // fetch combos for the user (unchanged)
         const combos = await Combo.find({ username: user.username }).lean();
 
-        const userTasks = tasks.filter(t => (t.set || 1) === userSet);
-        const tasksStarted = userTasks.length;
+        // counts
+        const tasksStarted = tasks.length;
+        const tasksCompleted = tasks.filter(t => (t.status || '').toLowerCase() === 'completed').length;
 
+        // DEBUG: helpful log to diagnose off-by-one issues (remove or reduce level in prod)
+        console.log('start-task debug', {
+          username: user.username,
+          userSet,
+          tasksStarted,
+          tasksCompleted,
+          tasksPreview: tasks.map(t => ({ _id: t._id, set: t.set, status: t.status, startedAt: t.startedAt || t.createdAt })),
+          comboTriggers: combos.map(c => ({ _id: c._id, trigger: c.triggerTaskNumber }))
+        });
+
+        // use the filtered tasks (same set) for pending-checks
         if (hasPendingComboTask(tasks || [], user)) {
             return res.json({ success: false, message: "You must submit all combo products before starting new tasks." });
         }
         if (hasPendingTask(tasks || [], user)) {
             return res.json({ success: false, message: "You must submit your current product before starting another." });
         }
+
         if (tasksStarted === 0 && user.balance < 50) {
             return res.json({ success: false, message: 'You need at least £50 balance to start your first task set.' });
         }
@@ -718,11 +741,21 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 
         // Combo logic (for combos enforce that comboTotal >= minAllowedPrice)
         let comboToTrigger = null;
-        if (Array.isArray(combos)) {
-            comboToTrigger = combos.find(combo =>
-                Number(combo.triggerTaskNumber) === (tasksStarted + 1) && combo.username === user.username
-            );
-        }
+
+        /*
+          Semantics decision:
+          - The code originally triggered when Number(combo.triggerTaskNumber) === (tasksStarted + 1)
+            (i.e. when the user is starting the Nth task).
+          - To avoid off-by-one issues caused by tasks from other sets or missing set fields,
+            we now count tasks strictly for the current set (above). We keep the original
+            "start of Nth task" semantics by comparing to tasksStarted + 1.
+          - If you prefer "trigger when N tasks have already been completed" change the comparison
+            below to use tasksCompleted (e.g. Number(...) === tasksCompleted).
+        */
+
+        comboToTrigger = combos.find(combo =>
+            Number(combo.triggerTaskNumber) === (tasksStarted + 1) && combo.username === user.username
+        );
 
         if (comboToTrigger && comboToTrigger.products && comboToTrigger.products.length === 2) {
             const comboTotal = comboToTrigger.products.reduce((sum, prod) => sum + Number(prod.price || 0), 0);
