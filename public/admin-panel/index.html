@@ -665,23 +665,27 @@
     // Real-time dashboard stats: fetch from backend
     async function updateDashboardStats() {
       try {
-        // IMPORTANT: Use 'x-admin-token' for all requests!
-        const headers = { 'x-admin-token': localStorage.getItem("adminToken") };
-        const [users, balance, tasks, withdrawals] = await Promise.all([
-          fetch('/admin/total-users', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
-          fetch('/admin/total-balance', { headers }).then(r=>r.json()).catch(()=>({total:"-"})),
-          fetch('/admin/active-tasks', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
-          fetch('/admin/pending-withdrawals', { headers }).then(r=>r.json()).catch(()=>({count:"-"})),
+        const headers = { 'x-admin-token': localStorage.getItem("adminToken") || '' };
+        const [usersRes, balanceRes, tasksRes, withdrawalsRes] = await Promise.all([
+          fetch('/admin/total-users', { headers }).then(r => r.json()).catch(() => ({ count: "-" })),
+          fetch('/admin/total-balance', { headers }).then(r => r.json()).catch(() => ({ total: "-" })),
+          fetch('/admin/active-tasks', { headers }).then(r => r.json()).catch(() => ({ count: "-" })),
+          fetch('/admin/pending-withdrawals', { headers }).then(r => r.json()).catch(() => ({ count: "-" })),
         ]);
-        document.getElementById("totalUsers").textContent = users.count ?? "-";
-        document.getElementById("totalBalance").textContent = balance.total ? `$${balance.total}` : "-";
-        document.getElementById("activeTasks").textContent = tasks.count ?? "-";
-        document.getElementById("pendingWithdrawals").textContent = withdrawals.count ?? "-";
-      } catch(e) {
-        document.getElementById("totalUsers").textContent = "-";
-        document.getElementById("totalBalance").textContent = "-";
-        document.getElementById("activeTasks").textContent = "-";
-        document.getElementById("pendingWithdrawals").textContent = "-";
+
+        // helper to set textContent only when element exists
+        const setIf = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        setIf("totalUsers", (usersRes && typeof usersRes.count !== 'undefined') ? usersRes.count : "-");
+        setIf("totalBalance", (balanceRes && balanceRes.total) ? `$${balanceRes.total}` : "-");
+        setIf("activeTasks", (tasksRes && typeof tasksRes.count !== 'undefined') ? tasksRes.count : "-");
+        setIf("pendingWithdrawals", (withdrawalsRes && typeof withdrawalsRes.count !== 'undefined') ? withdrawalsRes.count : "-");
+      } catch (e) {
+        console.error('updateDashboardStats error', e);
+        // fail silently in UI but keep other scripts running
       }
     }
 
@@ -814,7 +818,7 @@
     updateAppbarTitle("dashboard");
     syncIframeDarkMode();
 
-    /* ===== Add User modal wiring ===== */
+    /* ===== Add User modal wiring (Safer + debug logging) ===== */
     (function(){
       const openBtn = document.getElementById('openAddUserBtn');
       const modal = document.getElementById('addUserModal');
@@ -823,20 +827,10 @@
       const form = document.getElementById('addUserForm');
       const msgEl = document.getElementById('au_msg');
 
-      function showModal() {
-        msgEl.textContent = '';
-        modal.style.display = 'flex';
-        modal.setAttribute('aria-hidden','false');
-      }
-      function hideModal() {
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden','true');
-      }
+      function showModal() { msgEl.textContent = ''; modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); }
+      function hideModal() { modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); }
 
-      openBtn && openBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        showModal();
-      });
+      openBtn && openBtn.addEventListener('click', (e) => { e.preventDefault(); showModal(); });
       closeBtn && closeBtn.addEventListener('click', hideModal);
       cancelBtn && cancelBtn.addEventListener('click', hideModal);
 
@@ -850,21 +844,36 @@
       }
 
       async function createMinimalUser(token, payload) {
+        // Defensive: never send a client-supplied _id
+        if (payload && (payload._id || payload.id)) { delete payload._id; delete payload.id; }
+        console.debug('[admin] createMinimalUser payload:', payload);
         const res = await fetch('/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+          credentials: 'include',
           body: JSON.stringify(payload)
         });
-        return res.json();
+        const raw = await res.text();
+        let body;
+        try { body = JSON.parse(raw); } catch(e){ body = { success: false, __raw: raw }; }
+        console.debug('[admin] createMinimalUser response status:', res.status, 'body:', body);
+        return { ok: res.ok, status: res.status, body };
       }
 
       async function updateUserFields(token, username, updates) {
+        if (!username) throw new Error('username required for update');
+        console.debug('[admin] updateUserFields', username, updates);
         const res = await fetch('/admin/user/' + encodeURIComponent(username), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+          credentials: 'include',
           body: JSON.stringify({ action: 'edit', updates })
         });
-        return res.json();
+        const raw = await res.text();
+        let body;
+        try { body = JSON.parse(raw); } catch(e) { body = { success: false, __raw: raw }; }
+        console.debug('[admin] updateUserFields response', res.status, body);
+        return { ok: res.ok, status: res.status, body };
       }
 
       form.addEventListener('submit', async (ev) => {
@@ -889,11 +898,14 @@
             return;
           }
 
-          // create minimal user
+          // create minimal user (do not include _id)
           const createPayload = { username, phone, vipLevel: 1, balance: 0 };
           const createResp = await createMinimalUser(token, createPayload);
-          if (createResp && createResp.success === false && createResp.message && !createResp.message.toLowerCase().includes('exists')) {
-            throw new Error(createResp.message || 'Failed to create user');
+
+          if (!createResp.ok || (createResp.body && createResp.body.success === false)) {
+            const serverMsg = createResp.body && (createResp.body.message || createResp.body.__raw) ? (createResp.body.message || createResp.body.__raw) : `HTTP ${createResp.status}`;
+            console.warn('[admin] create user failed:', serverMsg, createResp.body);
+            throw new Error(serverMsg || 'Failed to create user');
           }
 
           const updates = {
@@ -905,9 +917,11 @@
           Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
 
           if (Object.keys(updates).length > 0) {
-            const upd = await updateUserFields(token, username, updates);
-            if (!upd || upd.success === false) {
-              throw new Error(upd.message || 'Failed to update user fields');
+            const updResp = await updateUserFields(token, username, updates);
+            if (!updResp.ok || (updResp.body && updResp.body.success === false)) {
+              const serverMsg = updResp.body && (updResp.body.message || updResp.body.__raw) ? (updResp.body.message || updResp.body.__raw) : `HTTP ${updResp.status}`;
+              console.warn('[admin] update user fields failed', serverMsg, updResp.body);
+              throw new Error(serverMsg || 'Failed to update user fields');
             }
           }
 
@@ -915,17 +929,16 @@
           msgEl.textContent = 'Training account created and linked.';
           setTimeout(hideModal, 700);
           showToast('User created and linked');
+          if (typeof refreshUserList === 'function') refreshUserList();
         } catch (err) {
-          console.error(err);
+          console.error('[admin] Add user error:', err);
           msgEl.style.color = '#c62828';
           msgEl.textContent = 'Error: ' + (err.message || 'Unknown');
         }
       });
 
       // close modal on outside click
-      window.addEventListener('click', (evt) => {
-        if (evt.target === modal) hideModal();
-      });
+      window.addEventListener('click', (evt) => { if (evt.target === modal) hideModal(); });
     })();
     /* ===== end Add User modal wiring ===== */
 
