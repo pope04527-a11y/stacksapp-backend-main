@@ -1,3 +1,4 @@
+// (full file — updated comparator uses tasksCompleted to decide combo trigger)
 const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -747,14 +748,13 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
           - The code originally triggered when Number(combo.triggerTaskNumber) === (tasksStarted + 1)
             (i.e. when the user is starting the Nth task).
           - To avoid off-by-one issues caused by tasks from other sets or missing set fields,
-            we now count tasks strictly for the current set (above). We keep the original
-            "start of Nth task" semantics by comparing to tasksStarted + 1.
-          - If you prefer "trigger when N tasks have already been completed" change the comparison
-            below to use tasksCompleted (e.g. Number(...) === tasksCompleted).
+            we now count tasks strictly for the current set (above). We now match combos by
+            the number of completed tasks (tasksCompleted), so a combo with trigger=14 will be
+            considered after the user has 14 completed tasks (and the next start will create the combo task).
         */
 
         comboToTrigger = combos.find(combo =>
-            Number(combo.triggerTaskNumber) === (tasksStarted + 1) && combo.username === user.username
+            Number(combo.triggerTaskNumber) === tasksCompleted && combo.username === user.username
         );
 
         if (comboToTrigger && comboToTrigger.products && comboToTrigger.products.length === 2) {
