@@ -511,15 +511,18 @@ router.post('/users', asyncHandler(async (req, res) => {
     };
 
     try {
+        // Preferred: let Mongoose assign _id automatically
         const created = await User.create(user);
         return res.json({ success: true, user: created });
     } catch (err) {
         const msg = err && err.message ? err.message : String(err);
         console.error('POST /admin/users create error:', msg, err && err.stack ? err.stack : '');
-        // If Mongoose complains about missing _id, attempt a single retry with a generated ObjectId
+
+        // Only attempt a retry if the error message explicitly suggests missing _id
         if (msg.toLowerCase().includes('document must have an _id')) {
             try {
-                user._id = mongoose.Types.ObjectId();
+                // Correct: construct a new ObjectId instance
+                user._id = new mongoose.Types.ObjectId();
                 const created2 = await User.create(user);
                 return res.json({ success: true, user: created2 });
             } catch (err2) {
@@ -527,6 +530,7 @@ router.post('/users', asyncHandler(async (req, res) => {
                 return res.status(500).json({ success: false, message: err2 && err2.message ? err2.message : 'Failed to create user (retry)' });
             }
         }
+
         return res.status(500).json({ success: false, message: msg });
     }
 }));
