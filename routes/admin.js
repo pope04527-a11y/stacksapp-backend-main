@@ -484,24 +484,51 @@ router.get('/users', asyncHandler(async (_, res) => {
     res.json(users);
 }));
 router.post('/users', asyncHandler(async (req, res) => {
-    const { username, phone, vipLevel, balance, exchange, walletAddress } = req.body;
+    // Debug log incoming payload for visibility
+    try { console.log('POST /admin/users payload:', JSON.stringify(req.body).slice(0, 2000)); } catch (e) { /* ignore */ }
+
+    // Defensive: remove any client-supplied _id or id so server controls _id generation
+    if (req.body && (req.body._id || req.body.id)) {
+        try { delete req.body._id; delete req.body.id; } catch (e) {}
+    }
+
+    const { username, phone, vipLevel, balance, exchange, walletAddress } = req.body || {};
     if (!username || !phone) return res.status(400).json({ success: false, message: 'Username and phone are required' });
+
     const exists = await User.findOne({ username }).lean();
     if (exists) return res.status(409).json({ success: false, message: 'Username already exists' });
 
     const user = {
         username,
         phone,
-        vipLevel: vipLevel || 1,
-        balance: balance || 0,
+        vipLevel: (typeof vipLevel !== 'undefined') ? vipLevel : 1,
+        balance: (typeof balance !== 'undefined') ? balance : 0,
         status: "Active",
         tasksCompletedInSet: 0,
         tasksSetSize: 40,
         exchange: exchange || "",
         walletAddress: walletAddress || ""
     };
-    await User.create(user);
-    res.json({ success: true, user });
+
+    try {
+        const created = await User.create(user);
+        return res.json({ success: true, user: created });
+    } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        console.error('POST /admin/users create error:', msg, err && err.stack ? err.stack : '');
+        // If Mongoose complains about missing _id, attempt a single retry with a generated ObjectId
+        if (msg.toLowerCase().includes('document must have an _id')) {
+            try {
+                user._id = mongoose.Types.ObjectId();
+                const created2 = await User.create(user);
+                return res.json({ success: true, user: created2 });
+            } catch (err2) {
+                console.error('Retry create with generated _id failed:', err2 && err2.stack ? err2.stack : err2);
+                return res.status(500).json({ success: false, message: err2 && err2.message ? err2.message : 'Failed to create user (retry)' });
+            }
+        }
+        return res.status(500).json({ success: false, message: msg });
+    }
 }));
 router.put('/users/:username', asyncHandler(async (req, res) => {
     const { username } = req.params;
