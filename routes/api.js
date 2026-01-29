@@ -470,9 +470,27 @@ router.post('/users/register', async (req, res) => {
         currentSet: 1
     };
 
-    await User.create(newUser);
-
-    return res.json({ success: true, user: newUser });
+    // Ensure _id is provided because the schema declares _id: String (Mongoose won't auto-generate a string _id)
+    try {
+      newUser._id = newUser._id || crypto.randomBytes(12).toString('hex');
+      const created = await User.create(newUser);
+      return res.json({ success: true, user: created });
+    } catch (err) {
+      console.error('users/register create error:', err && err.stack ? err.stack : err);
+      // If we somehow hit an _id-related error, try a fallback id-generation (string)
+      const msg = err && err.message ? err.message : String(err);
+      if (msg.toLowerCase().includes('document must have an _id')) {
+        try {
+          newUser._id = crypto.randomBytes(16).toString('hex');
+          const created2 = await User.create(newUser);
+          return res.json({ success: true, user: created2 });
+        } catch (err2) {
+          console.error('users/register retry failed:', err2 && err2.stack ? err2.stack : err2);
+          return res.status(500).json({ success: false, message: 'Failed to create user', error: err2 && err2.message ? err2.message : String(err2) });
+        }
+      }
+      return res.status(500).json({ success: false, message: 'Internal server error', error: msg });
+    }
 });
 
 // Authentication (login) — trigger async cache pre-warm so subsequent start-task is fast
