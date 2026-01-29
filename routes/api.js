@@ -1,4 +1,3 @@
-// (full file — updated comparator uses tasksCompleted to decide combo trigger)
 const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -32,6 +31,12 @@ const userSchema = new mongoose.Schema({
   // store starting balance for current set so we can enforce min-product-price rule
   setStartingBalance: { type: Number, default: null },
   createdAt: String,
+
+  // New fields for cross-device sign-in and working-day recording
+  // registeredWorkingDays: map { "YYYY-MM-DD": numberOfSetsCompleted }
+  registeredWorkingDays: { type: mongoose.Schema.Types.Mixed, default: {} },
+  // signState: { signedCount: Number, lastSignDate: "YYYY-MM-DD" }
+  signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } }
 }, { collection: 'users', strict: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -204,6 +209,20 @@ function hasPendingTask(tasks, user) {
         !t.isCombo &&
         (t.status === 'Pending' || t.status === 'pending')
     );
+}
+
+// Helper: return "YYYY-MM-DD" for Europe/London timezone (server authoritative)
+function getUKDateKey(d = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London' }).formatToParts(d);
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const day = parts.find(p => p.type === 'day')?.value;
+    return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  } catch (err) {
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+  }
 }
 
 // ========== Platform status helpers & middleware (NEW) ==========
@@ -538,8 +557,8 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
 
     if (typeof dbUser.currentSet !== "number") dbUser.currentSet = 1;
 
-    // --- Midnight commission reset safety (frontend always correct after midnight) ---
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // --- Midnight commission reset safety (use UK day) ---
+    const todayStr = getUKDateKey();
     if (dbUser.lastCommissionReset !== todayStr) {
         dbUser.commissionToday = 0;
         dbUser.lastCommissionReset = todayStr;
@@ -552,6 +571,10 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
     const taskCountThisSet = tasks.filter(
         t => t.username === dbUser.username && t.status?.toLowerCase() === "completed" && (t.set || 1) === userSet
     ).length;
+
+    // Get registered sets count for today from stored map
+    const regMap = dbUser.registeredWorkingDays || {};
+    const registeredSetsToday = regMap[todayStr] || 0;
 
     res.json({
         success: true,
@@ -567,9 +590,50 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             referredBy: dbUser.referredBy ?? "",
             exchange: dbUser.exchange ?? "",
             walletAddress: dbUser.walletAddress ?? "",
-            fullName: dbUser.fullName ?? ""
+            fullName: dbUser.fullName ?? "",
+            // server-side working-day data
+            registeredWorkingDays: regMap,
+            registeredSetsToday,
+            signState: dbUser.signState || { signedCount: 0, lastSignDate: null }
         }
     });
+});
+
+// Sign-in endpoint: persist sign state server-side for cross-device sync
+router.post('/sign-in', verifyUserToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const REQUIRED_SETS = 2;
+    const todayKey = getUKDateKey();
+    const regMap = user.registeredWorkingDays || {};
+    const setsToday = regMap[todayKey] || 0;
+
+    if (setsToday < REQUIRED_SETS) {
+      return res.status(400).json({ success: false, message: `You need to complete at least ${REQUIRED_SETS} sets today to sign in. Progress: ${setsToday}/${REQUIRED_SETS}` });
+    }
+
+    const yesterdayKey = getUKDateKey(new Date(Date.now() - 86400000));
+    let newCount = 1;
+    if (user.signState && user.signState.lastSignDate === yesterdayKey) {
+      newCount = (user.signState.signedCount || 0) + 1;
+    } else if (user.signState && user.signState.lastSignDate === todayKey) {
+      newCount = user.signState.signedCount || 1;
+    } else {
+      newCount = 1;
+    }
+    if (newCount > 30) newCount = 30;
+
+    const newSignState = { signedCount: newCount, lastSignDate: todayKey };
+    user.signState = newSignState;
+    await user.save();
+
+    return res.json({ success: true, signState: newSignState });
+  } catch (err) {
+    console.error('sign-in error:', err);
+    return res.status(500).json({ success: false, message: 'Sign-in failed', error: err.message });
+  }
 });
 
 // Product recommendation
@@ -902,6 +966,27 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           }
         })();
 
+        // After marking completed, check if the set is now complete
+        try {
+          const taskSet = task.set || 1;
+          const vipInfo = vipRules[user.vipLevel] || vipRules[1];
+          const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
+          if (completedCount >= (vipInfo.tasks || 40)) {
+            const todayKey = getUKDateKey();
+            // Atomically increment registeredWorkingDays[todayKey], and increment currentSet and clear setStartingBalance
+            const updates = {
+              $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
+              $set: { setStartingBalance: null }
+            };
+            // increment currentSet safely
+            await User.updateOne({ _id: user._id }, updates);
+            // then increment currentSet in a separate operation to avoid clobbering existing currentSet
+            await User.updateOne({ _id: user._id }, { $inc: { currentSet: 1 } });
+          }
+        } catch (err) {
+          console.error('post-combo-completion bookkeeping failed:', err);
+        }
+
         // Construct response without doing another DB read
         const responseTask = {
           ...task,
@@ -951,6 +1036,23 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           console.error('Referral distribution failed (single, async):', err);
         }
       })();
+
+      // After marking this task completed, check whether the set is finished
+      try {
+        const taskSet = task.set || 1;
+        const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
+        if (completedCount >= (vipInfo.tasks || 40)) {
+          const todayKey = getUKDateKey();
+          const updates = {
+            $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
+            $set: { setStartingBalance: null }
+          };
+          await User.updateOne({ _id: user._id }, updates);
+          await User.updateOne({ _id: user._id }, { $inc: { currentSet: 1 } });
+        }
+      } catch (err) {
+        console.error('post-task-completion bookkeeping failed:', err);
+      }
 
       // Build response locally to avoid extra DB read
       const responseTask = {
