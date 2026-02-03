@@ -7,10 +7,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Small local styles to keep action icons aligned and visible -->
+  <!-- Local styles to keep action icons aligned and consistent (only Approve & Reject buttons) -->
   <style>
     /* Keep icon buttons compact and consistent */
-    .action-icons { display: flex; align-items: center; gap: 6px; }
+    .action-icons { display: flex; align-items: center; gap: 8px; }
     .action-icons .icon-btn {
       background: transparent;
       border: 1px solid transparent;
@@ -20,18 +20,21 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 34px;
-      height: 34px;
-      transition: background-color 0.12s, border-color 0.12s;
+      min-width: 36px;
+      height: 36px;
+      transition: background-color 0.12s, border-color 0.12s, opacity 0.12s;
       color: #1f2937; /* default icon color */
     }
-    .action-icons .icon-btn:hover { background-color: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.06); }
     .action-icons .icon-btn .fa { font-size: 14px; }
     .icon-btn.approve { color: #16a34a; }
     .icon-btn.reject { color: #dc2626; }
-    .icon-btn.refund { color: #f59e0b; }
-    .icon-btn.edit { color: #2563eb; }
-    .icon-btn.delete { color: #6b7280; }
+    .icon-btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+      background-color: transparent;
+      border-color: transparent;
+    }
     /* Ensure action cell doesn't wrap icons awkwardly */
     td.action-icons { white-space: nowrap; }
   </style>
@@ -85,7 +88,7 @@
   <!-- Toast Notification -->
   <div id="toast" class="toast"></div>
 
-  <!-- Approve/Reject Modal -->
+  <!-- Approve/Reject Modal (kept in case of future use) -->
   <div class="modal" id="withdrawalModal">
     <div class="modal-content">
       <span class="close" onclick="closeWithdrawalModal()">&times;</span>
@@ -153,6 +156,9 @@
           statusBadgeClass = "status-pending";
         }
 
+        // Determine availability of actions: approve/reject intended for pending/reviewing
+        const isPending = (rawStatus === "pending" || rawStatus === "reviewing");
+
         table.innerHTML += `
           <tr>
             <td><input type="checkbox" onclick="selectWithdrawal(${idx}, this)" ${checked}></td>
@@ -167,18 +173,8 @@
             </td>
             <td>${wdl.createdAt ? new Date(wdl.createdAt).toLocaleString() : (wdl.requestedAt ? new Date(wdl.requestedAt).toLocaleString() : "")}</td>
             <td class="action-icons">
-              ${
-                // Show Approve/Reject only for pending/reviewing
-                (rawStatus === "pending" || rawStatus === "reviewing") ? `
-                  <button class="icon-btn approve" title="Approve" onclick="approveWithdrawal(${idx})"><i class="fa fa-check"></i></button>
-                  <button class="icon-btn reject" title="Reject & Return Funds" onclick="rejectWithdrawal(${idx})"><i class="fa fa-times"></i></button>
-                ` : ``
-              }
-              <!-- Refund button (returns funds to user) - visible for all rows -->
-              <button class="icon-btn refund" title="Refund & Return Funds to User" onclick="refundWithdrawal(${idx})"><i class="fa fa-undo"></i></button>
-
-              <button class="icon-btn edit" title="Edit" onclick="editWithdrawal(${idx})"><i class="fa fa-edit"></i></button>
-              <button class="icon-btn delete" title="Delete" onclick="deleteWithdrawal(${idx})"><i class="fa fa-trash"></i></button>
+              <button class="icon-btn approve" title="Approve" onclick="approveWithdrawal(${idx})" ${isPending ? '' : 'disabled'}><i class="fa fa-check"></i></button>
+              <button class="icon-btn reject" title="Reject (refund to user)" onclick="rejectWithdrawal(${idx})" ${isPending ? '' : 'disabled'}><i class="fa fa-times"></i></button>
             </td>
           </tr>
         `;
@@ -199,6 +195,8 @@
         showToast("Cannot approve: withdrawal id missing.");
         return;
       }
+      if (!confirm("Approve this withdrawal?")) return;
+
       const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/approve`, {
         method: 'PATCH',
         headers: { "x-admin-token": localStorage.getItem('adminToken') }
@@ -212,7 +210,7 @@
       fetchWithdrawals();
     }
 
-    // Reject pending withdrawal (send intent to return funds)
+    // Reject pending withdrawal and refund amount back to user's account
     async function rejectWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
@@ -237,82 +235,6 @@
         showToast("Withdrawal rejected and funds returned to user.");
       }
       fetchWithdrawals();
-    }
-
-    // Refund withdrawal - try endpoint, fallback to reject-with-return or updating status
-    async function refundWithdrawal(idx) {
-      const wdl = allWithdrawals[idx];
-      const id = withdrawalId(wdl);
-      if (!id) {
-        showToast("Cannot refund: withdrawal id missing.");
-        return;
-      }
-      if (!confirm("Refund this withdrawal and return the withdrawn amount to the user's account?")) return;
-
-      // Primary refund endpoint
-      try {
-        let res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/refund`, {
-          method: 'PATCH',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
-
-        if (res.ok) {
-          showToast("Withdrawal refunded and funds returned to user.");
-          fetchWithdrawals();
-          return;
-        }
-
-        // If refund endpoint is not found, try fallback to reject with returnToUser
-        if (res.status === 404) {
-          // attempt to reject and request returnToUser
-          const fallbackRes = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
-            method: 'PATCH',
-            headers: {
-              "Content-Type": "application/json",
-              "x-admin-token": localStorage.getItem('adminToken')
-            },
-            body: JSON.stringify({ returnToUser: true })
-          });
-          if (fallbackRes.ok) {
-            showToast("Refund endpoint unavailable — performed reject with return-to-user as fallback.");
-            fetchWithdrawals();
-            return;
-          } else {
-            const fallbackErr = await fallbackRes.json().catch(()=>({message:'Error'}));
-            // If reject fallback failed, try to set status via PUT as last attempt
-            console.warn("Reject fallback failed:", fallbackErr);
-            // last resort: mark status as Refunded (backend may or may not honor)
-            const putRes = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}`, {
-              method: 'PUT',
-              headers: {
-                "Content-Type": "application/json",
-                "x-admin-token": localStorage.getItem('adminToken')
-              },
-              body: JSON.stringify({ status: "Refunded", returnToUser: true })
-            });
-            if (putRes.ok) {
-              showToast("Refund endpoint missing — withdrawal marked as Refunded (server update).");
-              fetchWithdrawals();
-              return;
-            } else {
-              const putErr = await putRes.json().catch(()=>({message:'Error'}));
-              showToast("Refund failed: " + (putErr && putErr.message ? putErr.message : putRes.statusText));
-              fetchWithdrawals();
-              return;
-            }
-          }
-        } else {
-          // For other non-OK responses from /refund, surface backend message
-          const err = await res.json().catch(()=>({message:'Error'}));
-          showToast("Refund failed: " + (err && err.message ? err.message : res.statusText));
-          fetchWithdrawals();
-          return;
-        }
-      } catch (err) {
-        showToast("Refund failed: " + (err && err.message ? err.message : "Unknown error"));
-        fetchWithdrawals();
-        return;
-      }
     }
 
     // Select/deselect withdrawal for bulk actions
@@ -341,7 +263,7 @@
       renderWithdrawals(filtered);
     }
 
-    // Edit (Approve/Reject) Withdrawal
+    // Modal helpers (kept for potential future use)
     function editWithdrawal(idx) {
       editingWithdrawalIndex = idx;
       const wdl = allWithdrawals[idx];
@@ -353,11 +275,9 @@
       document.getElementById("modalRequestedAt").value = wdl.createdAt ? new Date(wdl.createdAt).toLocaleString() : (wdl.requestedAt ? new Date(wdl.requestedAt).toLocaleString() : "");
       document.getElementById("withdrawalModal").style.display = "block";
     }
-
     function closeWithdrawalModal() {
       document.getElementById("withdrawalModal").style.display = "none";
     }
-
     document.getElementById("withdrawalForm").onsubmit = async function(e) {
       e.preventDefault();
       const status = document.getElementById("modalStatus").value;
@@ -387,7 +307,7 @@
       }
     };
 
-    // Delete withdrawal
+    // Delete withdrawal (kept but not used in UI)
     async function deleteWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
