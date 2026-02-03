@@ -6,38 +6,6 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- Local styles to keep action icons aligned and consistent (only Approve & Reject buttons) -->
-  <style>
-    /* Keep icon buttons compact and consistent */
-    .action-icons { display: flex; align-items: center; gap: 8px; }
-    .action-icons .icon-btn {
-      background: transparent;
-      border: 1px solid transparent;
-      padding: 6px;
-      border-radius: 6px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 36px;
-      height: 36px;
-      transition: background-color 0.12s, border-color 0.12s, opacity 0.12s;
-      color: #1f2937; /* default icon color */
-    }
-    .action-icons .icon-btn .fa { font-size: 14px; }
-    .icon-btn.approve { color: #16a34a; }
-    .icon-btn.reject { color: #dc2626; }
-    .icon-btn[disabled] {
-      opacity: 0.45;
-      cursor: not-allowed;
-      pointer-events: none;
-      background-color: transparent;
-      border-color: transparent;
-    }
-    /* Ensure action cell doesn't wrap icons awkwardly */
-    td.action-icons { white-space: nowrap; }
-  </style>
 </head>
 <body>
   <script>
@@ -88,7 +56,7 @@
   <!-- Toast Notification -->
   <div id="toast" class="toast"></div>
 
-  <!-- Approve/Reject Modal (kept in case of future use) -->
+  <!-- Approve/Reject Modal -->
   <div class="modal" id="withdrawalModal">
     <div class="modal-content">
       <span class="close" onclick="closeWithdrawalModal()">&times;</span>
@@ -109,7 +77,7 @@
   </div>
 
   <script>
-    // --- WITHDRAWALS MANAGEMENT WITH RESTful API ---
+    // --- WITHDRAWALS MANAGEMENT WITH RESTFUL API ---
     let selectedWithdrawals = new Set();
     let editingWithdrawalIndex = null;
     let allWithdrawals = [];
@@ -136,8 +104,6 @@
       table.innerHTML = "";
       withdrawals.forEach((wdl, idx) => {
         const checked = selectedWithdrawals.has(idx) ? "checked" : "";
-        // Normalize status and id
-        const rawStatus = (wdl.status || "Pending").toLowerCase();
         let statusBadgeClass = "";
         let statusText = wdl.status || "Pending";
 
@@ -145,19 +111,16 @@
         const wid = wdl._id || wdl.id || wdl.transactionId || "";
 
         // Show "Pending" (reviewing) in red, "Completed"/"Approved" in green, "Rejected" in gray
-        if (rawStatus === "pending" || rawStatus === "reviewing") {
+        if (statusText.toLowerCase() === "pending" || statusText.toLowerCase() === "reviewing") {
           statusBadgeClass = "status-danger";
-        } else if (rawStatus === "completed" || rawStatus === "approved" || rawStatus === "success") {
+        } else if (statusText.toLowerCase() === "completed" || statusText.toLowerCase() === "approved" || statusText.toLowerCase() === "success") {
           statusBadgeClass = "status-active";
           statusText = "Completed";
-        } else if (rawStatus === "rejected" || rawStatus === "failed") {
+        } else if (statusText.toLowerCase() === "rejected" || statusText.toLowerCase() === "failed") {
           statusBadgeClass = "status-suspended";
         } else {
           statusBadgeClass = "status-pending";
         }
-
-        // Determine availability of actions: approve/reject intended for pending/reviewing
-        const isPending = (rawStatus === "pending" || rawStatus === "reviewing");
 
         table.innerHTML += `
           <tr>
@@ -173,8 +136,10 @@
             </td>
             <td>${wdl.createdAt ? new Date(wdl.createdAt).toLocaleString() : (wdl.requestedAt ? new Date(wdl.requestedAt).toLocaleString() : "")}</td>
             <td class="action-icons">
-              <button class="icon-btn approve" title="Approve" onclick="approveWithdrawal(${idx})" ${isPending ? '' : 'disabled'}><i class="fa fa-check"></i></button>
-              <button class="icon-btn reject" title="Reject (refund to user)" onclick="rejectWithdrawal(${idx})" ${isPending ? '' : 'disabled'}><i class="fa fa-times"></i></button>
+              <button class="icon-btn" title="Approve" onclick="approveWithdrawal(${idx})"><i class="fa fa-check"></i></button>
+              <button class="icon-btn" title="Reject" onclick="rejectWithdrawal(${idx})"><i class="fa fa-times"></i></button>
+              <button class="icon-btn" title="Edit" onclick="editWithdrawal(${idx})"><i class="fa fa-edit"></i></button>
+              <button class="icon-btn" title="Delete" onclick="deleteWithdrawal(${idx})"><i class="fa fa-trash"></i></button>
             </td>
           </tr>
         `;
@@ -195,8 +160,6 @@
         showToast("Cannot approve: withdrawal id missing.");
         return;
       }
-      if (!confirm("Approve this withdrawal?")) return;
-
       const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/approve`, {
         method: 'PATCH',
         headers: { "x-admin-token": localStorage.getItem('adminToken') }
@@ -210,7 +173,7 @@
       fetchWithdrawals();
     }
 
-    // Reject pending withdrawal and refund amount back to user's account
+    // Reject pending withdrawal
     async function rejectWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
@@ -218,21 +181,15 @@
         showToast("Cannot reject: withdrawal id missing.");
         return;
       }
-      if (!confirm("Reject this withdrawal and return the withdrawn amount to the user's account?")) return;
-
       const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
         method: 'PATCH',
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-token": localStorage.getItem('adminToken')
-        },
-        body: JSON.stringify({ returnToUser: true })
+        headers: { "x-admin-token": localStorage.getItem('adminToken') }
       });
       if (!res.ok) {
         const err = await res.json().catch(()=>({message:'Error'}));
         showToast("Reject failed: " + (err && err.message ? err.message : res.statusText));
       } else {
-        showToast("Withdrawal rejected and funds returned to user.");
+        showToast("Withdrawal rejected.");
       }
       fetchWithdrawals();
     }
@@ -263,7 +220,7 @@
       renderWithdrawals(filtered);
     }
 
-    // Modal helpers (kept for potential future use)
+    // Edit (Approve/Reject) Withdrawal
     function editWithdrawal(idx) {
       editingWithdrawalIndex = idx;
       const wdl = allWithdrawals[idx];
@@ -275,9 +232,11 @@
       document.getElementById("modalRequestedAt").value = wdl.createdAt ? new Date(wdl.createdAt).toLocaleString() : (wdl.requestedAt ? new Date(wdl.requestedAt).toLocaleString() : "");
       document.getElementById("withdrawalModal").style.display = "block";
     }
+
     function closeWithdrawalModal() {
       document.getElementById("withdrawalModal").style.display = "none";
     }
+
     document.getElementById("withdrawalForm").onsubmit = async function(e) {
       e.preventDefault();
       const status = document.getElementById("modalStatus").value;
@@ -307,7 +266,7 @@
       }
     };
 
-    // Delete withdrawal (kept but not used in UI)
+    // Delete withdrawal
     async function deleteWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
@@ -346,21 +305,16 @@
       selectedWithdrawals.clear();
     }
     async function bulkRejectWithdrawals() {
-      if (!confirm("Reject selected withdrawals and return funds to the respective users?")) return;
       for (let idx of Array.from(selectedWithdrawals)) {
         const wdl = allWithdrawals[idx];
         const id = withdrawalId(wdl);
         if (!id) continue;
         await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
           method: 'PATCH',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ returnToUser: true })
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
         });
       }
-      showToast("Selected withdrawals rejected and funds returned.");
+      showToast("Selected withdrawals rejected.");
       fetchWithdrawals();
       selectedWithdrawals.clear();
     }
