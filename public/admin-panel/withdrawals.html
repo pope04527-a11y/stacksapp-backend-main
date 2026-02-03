@@ -6,6 +6,35 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Small local styles to keep action icons aligned and visible -->
+  <style>
+    /* Keep icon buttons compact and consistent */
+    .action-icons { display: flex; align-items: center; gap: 6px; }
+    .action-icons .icon-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      padding: 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      height: 34px;
+      transition: background-color 0.12s, border-color 0.12s;
+      color: #1f2937; /* default icon color */
+    }
+    .action-icons .icon-btn:hover { background-color: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.06); }
+    .action-icons .icon-btn .fa { font-size: 14px; }
+    .icon-btn.approve { color: #16a34a; }
+    .icon-btn.reject { color: #dc2626; }
+    .icon-btn.refund { color: #f59e0b; }
+    .icon-btn.edit { color: #2563eb; }
+    .icon-btn.delete { color: #6b7280; }
+    /* Ensure action cell doesn't wrap icons awkwardly */
+    td.action-icons { white-space: nowrap; }
+  </style>
 </head>
 <body>
   <script>
@@ -104,6 +133,8 @@
       table.innerHTML = "";
       withdrawals.forEach((wdl, idx) => {
         const checked = selectedWithdrawals.has(idx) ? "checked" : "";
+        // Normalize status and id
+        const rawStatus = (wdl.status || "Pending").toLowerCase();
         let statusBadgeClass = "";
         let statusText = wdl.status || "Pending";
 
@@ -111,12 +142,12 @@
         const wid = wdl._id || wdl.id || wdl.transactionId || "";
 
         // Show "Pending" (reviewing) in red, "Completed"/"Approved" in green, "Rejected" in gray
-        if (statusText.toLowerCase() === "pending" || statusText.toLowerCase() === "reviewing") {
+        if (rawStatus === "pending" || rawStatus === "reviewing") {
           statusBadgeClass = "status-danger";
-        } else if (statusText.toLowerCase() === "completed" || statusText.toLowerCase() === "approved" || statusText.toLowerCase() === "success") {
+        } else if (rawStatus === "completed" || rawStatus === "approved" || rawStatus === "success") {
           statusBadgeClass = "status-active";
           statusText = "Completed";
-        } else if (statusText.toLowerCase() === "rejected" || statusText.toLowerCase() === "failed") {
+        } else if (rawStatus === "rejected" || rawStatus === "failed") {
           statusBadgeClass = "status-suspended";
         } else {
           statusBadgeClass = "status-pending";
@@ -137,13 +168,17 @@
             <td>${wdl.createdAt ? new Date(wdl.createdAt).toLocaleString() : (wdl.requestedAt ? new Date(wdl.requestedAt).toLocaleString() : "")}</td>
             <td class="action-icons">
               ${
-                (statusText.toLowerCase() === "pending" || statusText.toLowerCase() === "reviewing") ? `
-                  <button class="icon-btn" title="Approve" onclick="approveWithdrawal(${idx})"><i class="fa fa-check"></i></button>
-                  <button class="icon-btn" title="Reject" onclick="rejectWithdrawal(${idx})"><i class="fa fa-times"></i></button>
+                // Show Approve/Reject only for pending/reviewing
+                (rawStatus === "pending" || rawStatus === "reviewing") ? `
+                  <button class="icon-btn approve" title="Approve" onclick="approveWithdrawal(${idx})"><i class="fa fa-check"></i></button>
+                  <button class="icon-btn reject" title="Reject & Return Funds" onclick="rejectWithdrawal(${idx})"><i class="fa fa-times"></i></button>
                 ` : ``
               }
-              <button class="icon-btn" title="Edit" onclick="editWithdrawal(${idx})"><i class="fa fa-edit"></i></button>
-              <button class="icon-btn" title="Delete" onclick="deleteWithdrawal(${idx})"><i class="fa fa-trash"></i></button>
+              <!-- Refund button (returns funds to user) - visible for all rows -->
+              <button class="icon-btn refund" title="Refund & Return Funds to User" onclick="refundWithdrawal(${idx})"><i class="fa fa-undo"></i></button>
+
+              <button class="icon-btn edit" title="Edit" onclick="editWithdrawal(${idx})"><i class="fa fa-edit"></i></button>
+              <button class="icon-btn delete" title="Delete" onclick="deleteWithdrawal(${idx})"><i class="fa fa-trash"></i></button>
             </td>
           </tr>
         `;
@@ -177,7 +212,7 @@
       fetchWithdrawals();
     }
 
-    // Reject pending withdrawal
+    // Reject pending withdrawal (send intent to return funds)
     async function rejectWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
@@ -185,15 +220,49 @@
         showToast("Cannot reject: withdrawal id missing.");
         return;
       }
+      if (!confirm("Reject this withdrawal and return the withdrawn amount to the user's account?")) return;
+
       const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
         method: 'PATCH',
-        headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": localStorage.getItem('adminToken')
+        },
+        body: JSON.stringify({ returnToUser: true })
       });
       if (!res.ok) {
         const err = await res.json().catch(()=>({message:'Error'}));
         showToast("Reject failed: " + (err && err.message ? err.message : res.statusText));
       } else {
-        showToast("Withdrawal rejected.");
+        showToast("Withdrawal rejected and funds returned to user.");
+      }
+      fetchWithdrawals();
+    }
+
+    // Refund withdrawal - return funds to user account
+    async function refundWithdrawal(idx) {
+      const wdl = allWithdrawals[idx];
+      const id = withdrawalId(wdl);
+      if (!id) {
+        showToast("Cannot refund: withdrawal id missing.");
+        return;
+      }
+      if (!confirm("Refund this withdrawal and return the withdrawn amount to the user's account?")) return;
+
+      // Call refund endpoint - implement on backend: PATCH /admin/withdrawals/:id/refund
+      try {
+        const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/refund`, {
+          method: 'PATCH',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(()=>({message:'Error'}));
+          showToast("Refund failed: " + (err && err.message ? err.message : res.statusText));
+        } else {
+          showToast("Withdrawal refunded and funds returned to user.");
+        }
+      } catch (err) {
+        showToast("Refund failed: " + (err && err.message ? err.message : "Unknown error"));
       }
       fetchWithdrawals();
     }
@@ -309,16 +378,21 @@
       selectedWithdrawals.clear();
     }
     async function bulkRejectWithdrawals() {
+      if (!confirm("Reject selected withdrawals and return funds to the respective users?")) return;
       for (let idx of Array.from(selectedWithdrawals)) {
         const wdl = allWithdrawals[idx];
         const id = withdrawalId(wdl);
         if (!id) continue;
         await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
           method: 'PATCH',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ returnToUser: true })
         });
       }
-      showToast("Selected withdrawals rejected.");
+      showToast("Selected withdrawals rejected and funds returned.");
       fetchWithdrawals();
       selectedWithdrawals.clear();
     }
