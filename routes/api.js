@@ -36,7 +36,10 @@ const userSchema = new mongoose.Schema({
   // registeredWorkingDays: map { "YYYY-MM-DD": numberOfSetsCompleted }
   registeredWorkingDays: { type: mongoose.Schema.Types.Mixed, default: {} },
   // signState: { signedCount: Number, lastSignDate: "YYYY-MM-DD" }
-  signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } }
+  signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } },
+
+  // Manual reset flag: user requests reset for next set (must be processed by admin or via explicit endpoint)
+  resetRequested: { type: Boolean, default: false }
 }, { collection: 'users', strict: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -594,7 +597,8 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             // server-side working-day data
             registeredWorkingDays: regMap,
             registeredSetsToday,
-            signState: dbUser.signState || { signedCount: 0, lastSignDate: null }
+            signState: dbUser.signState || { signedCount: 0, lastSignDate: null },
+            resetRequested: !!dbUser.resetRequested
         }
     });
 });
@@ -973,15 +977,14 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
           if (completedCount >= (vipInfo.tasks || 40)) {
             const todayKey = getUKDateKey();
-            // Atomically increment registeredWorkingDays[todayKey], and increment currentSet and clear setStartingBalance
+            // Atomically increment registeredWorkingDays[todayKey], and mark that reset is requested.
+            // IMPORTANT: do NOT auto-increment currentSet anymore.
             const updates = {
               $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
-              $set: { setStartingBalance: null }
+              $set: { setStartingBalance: null, resetRequested: true }
             };
-            // increment currentSet safely
             await User.updateOne({ _id: user._id }, updates);
-            // then increment currentSet in a separate operation to avoid clobbering existing currentSet
-            await User.updateOne({ _id: user._id }, { $inc: { currentSet: 1 } });
+            // do NOT increment currentSet automatically here
           }
         } catch (err) {
           console.error('post-combo-completion bookkeeping failed:', err);
@@ -1043,12 +1046,14 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
         const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
         if (completedCount >= (vipInfo.tasks || 40)) {
           const todayKey = getUKDateKey();
+          // Atomically increment registeredWorkingDays[todayKey] and set resetRequested flag.
+          // IMPORTANT: do NOT auto-increment currentSet anymore.
           const updates = {
             $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
-            $set: { setStartingBalance: null }
+            $set: { setStartingBalance: null, resetRequested: true }
           };
           await User.updateOne({ _id: user._id }, updates);
-          await User.updateOne({ _id: user._id }, { $inc: { currentSet: 1 } });
+          // do not increment currentSet automatically here
         }
       } catch (err) {
         console.error('post-task-completion bookkeeping failed:', err);
@@ -1086,7 +1091,8 @@ router.post('/admin/reset-user-task-set', async (req, res) => {
     if (typeof user.currentSet !== "number") user.currentSet = 1;
     user.currentSet += 1;
     // Clear setStartingBalance so next set will record a fresh starting capital
-    await User.updateOne({ _id: user._id }, { $set: { currentSet: user.currentSet, setStartingBalance: null } });
+    // Also clear resetRequested flag because admin performed the reset
+    await User.updateOne({ _id: user._id }, { $set: { currentSet: user.currentSet, setStartingBalance: null, resetRequested: false } });
     res.json({ success: true, message: 'User task set has been reset. They can start a new set now.' });
 });
 
@@ -1129,6 +1135,21 @@ router.post('/admin/set-platform-status', async (req, res) => {
       autoOpenHourUK: typeof settings.autoOpenHourUK === 'number' ? settings.autoOpenHourUK : 10,
       whoCanAccessDuringClose: Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : []
     }});
+});
+
+// ----------------------- User Endpoint: Request Reset for Next Set -----------------------
+router.post('/users/request-reset', verifyUserToken, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    // Mark that the user has requested reset for next set.
+    await User.updateOne({ _id: user._id }, { $set: { resetRequested: true } });
+    return res.json({ success: true, message: 'Reset requested. An admin will process your reset, or use the admin endpoint to perform it.' });
+  } catch (err) {
+    console.error('request-reset error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to request reset', error: err.message });
+  }
 });
 
 // Deposit
