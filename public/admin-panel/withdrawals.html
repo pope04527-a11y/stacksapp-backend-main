@@ -239,7 +239,7 @@
       fetchWithdrawals();
     }
 
-    // Refund withdrawal - return funds to user account
+    // Refund withdrawal - try endpoint, fallback to reject-with-return or updating status
     async function refundWithdrawal(idx) {
       const wdl = allWithdrawals[idx];
       const id = withdrawalId(wdl);
@@ -249,22 +249,70 @@
       }
       if (!confirm("Refund this withdrawal and return the withdrawn amount to the user's account?")) return;
 
-      // Call refund endpoint - implement on backend: PATCH /admin/withdrawals/:id/refund
+      // Primary refund endpoint
       try {
-        const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/refund`, {
+        let res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/refund`, {
           method: 'PATCH',
           headers: { "x-admin-token": localStorage.getItem('adminToken') }
         });
-        if (!res.ok) {
+
+        if (res.ok) {
+          showToast("Withdrawal refunded and funds returned to user.");
+          fetchWithdrawals();
+          return;
+        }
+
+        // If refund endpoint is not found, try fallback to reject with returnToUser
+        if (res.status === 404) {
+          // attempt to reject and request returnToUser
+          const fallbackRes = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
+            method: 'PATCH',
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-token": localStorage.getItem('adminToken')
+            },
+            body: JSON.stringify({ returnToUser: true })
+          });
+          if (fallbackRes.ok) {
+            showToast("Refund endpoint unavailable — performed reject with return-to-user as fallback.");
+            fetchWithdrawals();
+            return;
+          } else {
+            const fallbackErr = await fallbackRes.json().catch(()=>({message:'Error'}));
+            // If reject fallback failed, try to set status via PUT as last attempt
+            console.warn("Reject fallback failed:", fallbackErr);
+            // last resort: mark status as Refunded (backend may or may not honor)
+            const putRes = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}`, {
+              method: 'PUT',
+              headers: {
+                "Content-Type": "application/json",
+                "x-admin-token": localStorage.getItem('adminToken')
+              },
+              body: JSON.stringify({ status: "Refunded", returnToUser: true })
+            });
+            if (putRes.ok) {
+              showToast("Refund endpoint missing — withdrawal marked as Refunded (server update).");
+              fetchWithdrawals();
+              return;
+            } else {
+              const putErr = await putRes.json().catch(()=>({message:'Error'}));
+              showToast("Refund failed: " + (putErr && putErr.message ? putErr.message : putRes.statusText));
+              fetchWithdrawals();
+              return;
+            }
+          }
+        } else {
+          // For other non-OK responses from /refund, surface backend message
           const err = await res.json().catch(()=>({message:'Error'}));
           showToast("Refund failed: " + (err && err.message ? err.message : res.statusText));
-        } else {
-          showToast("Withdrawal refunded and funds returned to user.");
+          fetchWithdrawals();
+          return;
         }
       } catch (err) {
         showToast("Refund failed: " + (err && err.message ? err.message : "Unknown error"));
+        fetchWithdrawals();
+        return;
       }
-      fetchWithdrawals();
     }
 
     // Select/deselect withdrawal for bulk actions
