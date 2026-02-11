@@ -3,6 +3,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const mongoose = require('mongoose');
 // Disable mongoose command buffering so any accidental native driver calls fail fast.
@@ -118,29 +119,91 @@ mongoose.connection.on('error', err => {
 // -----------------------------
 // Mount routes AFTER mongoose connection is attempted
 // -----------------------------
+/*
+  Important: previously a failing require("./routes/api") would be swallowed by a small
+  catch and the server would continue running without /api routes mounted, causing
+  clients to receive generic 404 {"success":false,"message":"Resource not found"}.
+  The logic below improves logging and, if mounting /routes/api fails, provides a
+  minimal fallback router which exposes a simple GET /api/ and a POST /api/login
+  that attempts to authenticate users directly using the 'users' collection so the
+  login flow still works even if the full routes file couldn't be loaded.
+*/
+
 try {
+  console.log('⏳ Attempting to require and mount ./routes/api');
   const apiRouter = require("./routes/api");
   app.use("/api", apiRouter);
+  console.log('✅ Mounted /api routes');
 } catch (e) {
-  console.error('Failed to mount /api routes:', e && e.message ? e.message : e);
+  // Print full stack to logs so deployments clearly show the root cause.
+  console.error('❌ Failed to mount /api routes:', e && e.stack ? e.stack : e);
+
+  // Fallback: provide a minimal router with a sanity GET and a lightweight POST /login
+  // that authenticates against the same users collection. This helps keep login working
+  // even if the full routes file failed to load (so frontend doesn't get silent 404).
+  const fallbackApi = express.Router();
+
+  fallbackApi.get('/', (req, res) => {
+    res.status(503).json({
+      success: false,
+      message: 'API routes failed to load on startup. Minimal fallback active. Check server logs for the original error.'
+    });
+  });
+
+  // Minimal login endpoint — mirrors the behavior of routes/api.js login handler
+  fallbackApi.post('/login', async (req, res) => {
+    try {
+      const input = req.body.input || req.body.username || "";
+      const password = req.body.password;
+
+      if (!input || password === undefined) {
+        return res.status(400).json({ success: false, message: 'Missing credentials' });
+      }
+
+      // Minimal User model bound to the same 'users' collection (non-strict schema)
+      const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({}, { collection: 'users', strict: false }));
+
+      const user = await User.findOne({
+        $or: [{ username: input }, { phone: input }],
+        loginPassword: password
+      });
+
+      if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
+      if (user.suspended) return res.status(403).json({ success: false, message: 'Account suspended' });
+
+      user.token = crypto.randomBytes(24).toString('hex');
+      await user.save();
+
+      // Return the user object (same shape as main route), but avoid loading heavy dependencies here.
+      return res.json({ success: true, user });
+    } catch (err) {
+      console.error('Fallback /api/login error:', err && err.stack ? err.stack : err);
+      return res.status(500).json({ success: false, message: 'Login failed (fallback)', error: err && err.message ? err.message : String(err) });
+    }
+  });
+
+  app.use('/api', fallbackApi);
 }
+
 try {
   const adminRouter = require("./routes/admin");
   app.use("/admin", adminRouter);
 } catch (e) {
-  console.error('Failed to mount /admin routes:', e && e.message ? e.message : e);
+  console.error('Failed to mount /admin routes:', e && e.stack ? e.stack : e);
 }
 try {
   const processCommissionsRouter = require("./routes/process-commission");
   app.use(processCommissionsRouter);
 } catch (e) {
-  console.error('Failed to mount process-commission route:', e && e.message ? e.message : e);
+  console.error('Failed to mount process-commission route:', e && e.stack ? e.stack : e);
 }
 try {
   const uploadRouter = require("./routes/upload");
   app.use("/api", uploadRouter);
 } catch (e) {
   // optional
+  console.error('Failed to mount upload route (optional):', e && e.stack ? e.stack : e);
 }
 
 // 404 + error handler
