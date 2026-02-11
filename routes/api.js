@@ -53,6 +53,20 @@ const Transaction = mongoose.models.Transaction || mongoose.model('Transaction',
 const LinkClick = mongoose.models.LinkClick || mongoose.model('LinkClick', new mongoose.Schema({}, { collection: 'linkclicks', strict: false }));
 const Setting = mongoose.models.Setting || mongoose.model('Setting', new mongoose.Schema({}, { collection: 'settings', strict: false }));
 
+// --- Session model to support multiple concurrent logins per user (one session per device/login) ---
+const sessionSchema = new mongoose.Schema({
+  token: { type: String, index: true },
+  userId: String,
+  userAgent: String,
+  ip: String,
+  createdAt: { type: String, default: () => new Date().toISOString() },
+  lastUsedAt: { type: String, default: null },
+  expiresAt: { type: String, default: null }, // optional ISO string
+  revoked: { type: Boolean, default: false }
+}, { collection: 'sessions', strict: false });
+
+const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
+
 cloudinary.config({
     cloud_name: 'dhubpqnss',
     api_key: '129672528218384',
@@ -297,11 +311,11 @@ async function checkPlatformStatus(req, res, next) {
   }
 }
 
-// ========== Auth middleware (unchanged behavior with safe local-dev fallback) ==========
+// ========== Auth middleware (updated to support sessions) ==========
 const verifyUserToken = async (req, res, next) => {
-    // accept token from headers (x-auth-token) or Authorization Bearer
-    // Extended: also accept token from cookies, request body, or query to be more tolerant of client setups.
     try {
+        // accept token from headers (x-auth-token) or Authorization Bearer
+        // Extended: also accept token from cookies, request body, or query to be more tolerant of client setups.
         let rawHeader = req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || req.headers['authorization'] || '';
         let token = null;
 
@@ -368,29 +382,61 @@ const verifyUserToken = async (req, res, next) => {
             return res.status(403).json({ success: false, message: 'Missing authentication token' });
         }
 
-        const user = await User.findOne({ token });
-        if (!user) {
-            // Invalid token — allow local dev fallback similarly to missing token
-            if (process.env.NODE_ENV !== 'production' &&
-                (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
-                try {
-                    const devHeader = req.headers['x-dev-username'];
-                    const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
-                    let devUser = null;
-                    if (devUsername) devUser = await User.findOne({ username: devUsername });
-                    if (!devUser) devUser = await User.findOne({});
-                    if (devUser) {
-                        req.user = devUser;
-                        return next();
-                    }
-                } catch (err) {
-                    console.warn('Dev auth fallback error (invalid token):', err && err.message ? err.message : err);
+        // 1) Preferred flow: validate token via Session collection (supports multiple concurrent sessions)
+        if (token) {
+            const session = await Session.findOne({ token });
+            if (session && !session.revoked) {
+                // optional expiry check
+                if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+                    // expired
+                    return res.status(403).json({ success: false, message: 'Session expired' });
                 }
+                const user = await User.findById(session.userId);
+                if (!user) {
+                    return res.status(403).json({ success: false, message: 'Invalid session (user not found)' });
+                }
+                // update lastUsedAt (best-effort)
+                session.lastUsedAt = new Date().toISOString();
+                try { await session.save(); } catch (e) { /* ignore save errors */ }
+                req.user = user;
+                req.session = session;
+                return next();
             }
-            return res.status(403).json({ success: false, message: 'Invalid or expired token' });
         }
-        req.user = user;
-        next();
+
+        // 2) Backwards compatibility: legacy single-token stored on User.token
+        const user = await User.findOne({ token });
+        if (user) {
+            req.user = user;
+            // create an in-memory session placeholder for compatibility (not saved)
+            req.session = {
+              token: user.token,
+              userId: user._id,
+              createdAt: user.createdAt || new Date().toISOString(),
+              legacy: true
+            };
+            return next();
+        }
+
+        // Local dev fallback on invalid token (unchanged)
+        if (process.env.NODE_ENV !== 'production' &&
+            (req.hostname === 'localhost' || (req.headers.origin && req.headers.origin.includes('localhost')))) {
+            try {
+                const devHeader = req.headers['x-dev-username'];
+                const devUsername = devUsernameFromBody || devUsernameFromQuery || (devHeader ? String(devHeader) : null);
+                let devUser = null;
+                if (devUsername) devUser = await User.findOne({ username: devUsername });
+                if (!devUser) devUser = await User.findOne({});
+                if (devUser) {
+                    req.user = devUser;
+                    return next();
+                }
+            } catch (err) {
+                console.warn('Dev auth fallback error (invalid token):', err && err.message ? err.message : err);
+            }
+        }
+
+        return res.status(403).json({ success: false, message: 'Invalid or expired token' });
     } catch (err) {
         console.error('verifyUserToken error:', err && err.message ? err.message : err);
         return res.status(500).json({ success: false, message: 'Authentication error' });
@@ -516,7 +562,7 @@ router.post('/users/register', async (req, res) => {
     }
 });
 
-// Authentication (login) — trigger async cache pre-warm so subsequent start-task is fast
+// Authentication (login) — now creates a session record instead of overwriting a single user.token
 router.post('/login', async (req, res) => {
     const input = req.body.input || req.body.username || "";
     const password = req.body.password;
@@ -524,19 +570,65 @@ router.post('/login', async (req, res) => {
         $or: [{ username: input }, { phone: input }],
         loginPassword: password
     });
-    if (user) {
-        if (user.suspended) return res.status(403).json({ success: false, message: 'Account suspended' });
-        user.token = crypto.randomBytes(24).toString('hex');
-        await user.save();
-
-        // pre-warm product cache (non-blocking)
-        fetchProductsFromCloudinary().catch(err => {
-          console.warn('Cloudinary pre-warm after login failed:', err && err.message ? err.message : err);
-        });
-
-        return res.json({ success: true, user });
+    if (!user) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
+    if (user.suspended) return res.status(403).json({ success: false, message: 'Account suspended' });
+
+    // generate per-login session token (opaque)
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+
+    const sessionDoc = {
+      token: sessionToken,
+      userId: user._id,
+      userAgent: req.headers['user-agent'] || '',
+      ip: req.ip || req.connection?.remoteAddress || '',
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+      // optional: set expiry (e.g. 30 days)
+      // expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString()
+    };
+
+    try {
+      await Session.create(sessionDoc);
+    } catch (err) {
+      console.error('Failed to create session:', err && err.message ? err.message : err);
+      return res.status(500).json({ success: false, message: 'Failed to create session' });
+    }
+
+    // pre-warm product cache (non-blocking)
+    fetchProductsFromCloudinary().catch(err => {
+      console.warn('Cloudinary pre-warm after login failed:', err && err.message ? err.message : err);
+    });
+
+    // Return user and token. Do not overwrite other sessions.
+    const userToReturn = user.toObject ? user.toObject() : user;
+    userToReturn.token = sessionToken; // include session token in response (not persisted on user)
+    return res.json({ success: true, user: userToReturn, token: sessionToken });
+});
+
+// Logout: revoke current session
+router.post('/logout', verifyUserToken, async (req, res) => {
+  try {
+    // if we validated via Session, req.session will be present and persisted
+    if (req.session && req.session._id) {
+      await Session.updateOne({ _id: req.session._id }, { $set: { revoked: true } });
+      return res.json({ success: true, message: 'Logged out' });
+    }
+
+    // Fallback: if legacy user.token was used, clear it (best-effort)
+    if (req.user && req.user.token) {
+      try {
+        await User.updateOne({ _id: req.user._id }, { $set: { token: "" } });
+      } catch (e) { /* ignore */ }
+      return res.json({ success: true, message: 'Logged out (legacy)' });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('logout error:', err);
+    return res.status(500).json({ success: false, message: 'Logout failed' });
+  }
 });
 
 // Wallet bind
@@ -1121,7 +1213,7 @@ router.post('/admin/set-platform-status', async (req, res) => {
     // allowList can be array or comma-separated string; store into whoCanAccessDuringClose
     if (Array.isArray(allowList)) {
       updates.whoCanAccessDuringClose = allowList;
-    } else if (typeof allowList === 'string' && allowList.trim()) {
+    } else if (typeof allowList === 'string' and allowList.trim()) {
       updates.whoCanAccessDuringClose = allowList.split(',').map(s => s.trim()).filter(Boolean);
     }
 
@@ -1268,8 +1360,22 @@ router.post('/change-password', verifyUserToken, async (req, res) => {
     }
 
     user.loginPassword = newPassword;
-    user.token = ""; // Invalidate token on password change
-    await user.save();
+
+    // Revoke all active sessions for this user so tokens must be reissued
+    try {
+      await Session.updateMany({ userId: user._id, revoked: { $ne: true } }, { $set: { revoked: true } });
+    } catch (err) {
+      console.warn('Failed to revoke sessions on password change:', err && err.message ? err.message : err);
+    }
+
+    // Optionally clear legacy token field for full compatibility (not required)
+    try {
+      user.token = "";
+      await user.save();
+    } catch (err) {
+      console.error('Failed to save user after password change:', err);
+      return res.status(500).json({ success: false, message: "Failed to update password, try again later." });
+    }
 
     res.json({ success: true, message: "Password updated successfully. Please log in again." });
 });
