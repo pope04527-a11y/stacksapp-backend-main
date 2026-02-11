@@ -6,6 +6,31 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Small inline helpers used by the page (kept minimal) */
+    .spinner-inline {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 3px solid #eee;
+      border-top-color: #1fb6fc;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .pagination {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-end;
+      margin-top:12px;
+    }
+    .page-btn { padding:6px 10px; border-radius:6px; border:1px solid #e6e9ee; background:#fff; cursor:pointer; }
+    .page-btn[disabled] { opacity:0.5; cursor:not-allowed; }
+    .small-muted { color:#68707a; font-size:13px; }
+  </style>
 </head>
 <body>
   <script>
@@ -44,6 +69,15 @@
             </tbody>
           </table>
         </div>
+
+        <div class="pagination" id="paginationControls" style="display:none;">
+          <div class="small-muted" id="paginationInfo"></div>
+          <div style="flex:1"></div>
+          <button class="page-btn" id="prevPageBtn" onclick="changePage(currentPage - 1)">Prev</button>
+          <span id="currentPageText" class="small-muted"></span>
+          <button class="page-btn" id="nextPageBtn" onclick="changePage(currentPage + 1)">Next</button>
+        </div>
+
         <div class="bulk-actions" id="bulkActions" style="display:none;">
           <button class="bulk-btn" onclick="bulkCompleteTasks()"><i class="fa fa-check"></i> Mark Complete</button>
           <button class="bulk-btn" onclick="bulkDeleteTasks()"><i class="fa fa-trash"></i> Delete Selected</button>
@@ -73,81 +107,229 @@
   </div>
 
   <script>
-    // --- TASKS MANAGEMENT WITH RESTful API ---
+    // --- TASKS MANAGEMENT (Paginated + Cached + Responsive UI) ---
     let selectedTasks = new Set();
     let editingTaskIndex = null;
+    // allTasks holds the current page items
     let allTasks = [];
+    // metadata about pagination
+    let currentPage = 1;
+    let perPage = 50;
+    let totalPages = 1;
+    let totalItems = 0;
+    let isFetching = false;
 
-    // Fetch all tasks from API
-    async function fetchTasks() {
+    // Cache TTL (ms) - short so admin sees fresh data but instant UI
+    const CACHE_TTL = 1000 * 60 * 2; // 2 minutes
+    const CACHE_KEY_PREFIX = "admin_tasks_page_";
+
+    // Utility: read cached page if exists and fresh
+    function readCachedPage(page) {
       try {
-        const res = await fetch('/admin/tasks', {
-          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
-        });
-        if (!res.ok) throw new Error('Unauthorized');
-        allTasks = await res.json();
-        renderTasks(allTasks);
-      } catch (err) {
-        alert("Session expired or unauthorized. Please login again.");
-        logout();
+        const raw = localStorage.getItem(CACHE_KEY_PREFIX + page);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.fetchedAt) return null;
+        if (Date.now() - parsed.fetchedAt > CACHE_TTL) {
+          localStorage.removeItem(CACHE_KEY_PREFIX + page);
+          return null;
+        }
+        return parsed;
+      } catch (e) {
+        return null;
       }
     }
 
-    // Render tasks in table: show only Task ID, User, Task Name, Status, Created At (matching your sample JSON)
+    // Utility: write cache
+    function writeCachedPage(page, payload) {
+      try {
+        const obj = { fetchedAt: Date.now(), payload };
+        localStorage.setItem(CACHE_KEY_PREFIX + page, JSON.stringify(obj));
+      } catch (e) { /* ignore */ }
+    }
+
+    // Show a short spinner if no cached data available; if cached data exists show it immediately
+    function setLoadingIndicator(show) {
+      const header = document.querySelector('.section-header h2');
+      if (!header) return;
+      // append or remove spinner element
+      if (show) {
+        if (!document.querySelector('.spinner-inline')) {
+          const spinner = document.createElement('span');
+          spinner.className = 'spinner-inline';
+          spinner.id = 'headerSpinner';
+          header.appendChild(spinner);
+        }
+      } else {
+        const s = document.getElementById('headerSpinner');
+        if (s) s.remove();
+      }
+    }
+
+    // Fetch tasks (paginated). Uses cache first for immediate render, then updates in background.
+    async function fetchTasks(page = 1, options = { force: false }) {
+      currentPage = page;
+      // Try cache
+      const cached = readCachedPage(page);
+      if (cached && !options.force) {
+        const payload = cached.payload;
+        allTasks = payload.records || [];
+        totalItems = payload.total || (payload.length || 0);
+        totalPages = payload.totalPages || Math.max(1, Math.ceil(totalItems / perPage));
+        renderTasks(allTasks);
+        updatePaginationUI();
+        // start background refresh but do not block immediate UI
+        backgroundFetch(page).catch(()=>{});
+        return;
+      }
+
+      // No cache -> show spinner and fetch
+      // Show spinner but cap visible time to avoid flicker
+      setLoadingIndicator(true);
+      isFetching = true;
+      try {
+        const fetchPromise = fetch(`/admin/tasks?page=${page}&perPage=${perPage}`, {
+          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
+        });
+        // If server is slow, avoid blocking UI longer than 1500ms for the spinner visibility
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500, 'timeout'));
+        const resOrTimeout = await Promise.race([fetchPromise, timeoutPromise]);
+
+        if (resOrTimeout === 'timeout') {
+          // still fetching but hide spinner to avoid long-blocking experience
+          setLoadingIndicator(false);
+          // await actual response
+          const res = await fetchPromise;
+          if (!res.ok) throw new Error('Failed to fetch tasks');
+          const data = await res.json();
+          processFetchedPage(page, data);
+        } else {
+          // fetch completed within timeout
+          const res = resOrTimeout;
+          if (!res.ok) throw new Error('Unauthorized');
+          const data = await res.json();
+          processFetchedPage(page, data);
+        }
+      } catch (err) {
+        // If unauthorized i.e. token expired -> redirect to login
+        if (err && err.message && /Unauthorized|401|403/i.test(String(err))) {
+          alert("Session expired or unauthorized. Please login again.");
+          logout();
+          return;
+        }
+        console.error('fetchTasks error:', err);
+        showToast('Failed to fetch tasks (server error)');
+      } finally {
+        isFetching = false;
+        setLoadingIndicator(false);
+      }
+    }
+
+    async function backgroundFetch(page) {
+      // Perform a silent refresh and update cache + UI if changed
+      try {
+        const res = await fetch(`/admin/tasks?page=${page}&perPage=${perPage}`, {
+          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Update cache and UI only if changed
+        const prev = JSON.stringify({ records: allTasks, total: totalItems });
+        const curr = JSON.stringify({ records: data.records || [], total: data.total || 0 });
+        writeCachedPage(page, data);
+        if (prev !== curr) {
+          allTasks = data.records || [];
+          totalItems = data.total || 0;
+          totalPages = data.totalPages || Math.max(1, Math.ceil(totalItems / perPage));
+          renderTasks(allTasks);
+          updatePaginationUI();
+        }
+      } catch (e) {
+        // silent
+      }
+    }
+
+    // Process fetched page and update cache/UI
+    function processFetchedPage(page, data) {
+      // response shape from paginated endpoint: { success, page, perPage, total, totalPages, records }
+      const payload = data && (data.records || data);
+      if (!payload) return;
+      const records = data.records || payload;
+      allTasks = records;
+      totalItems = data.total || (records.length || 0);
+      totalPages = data.totalPages || Math.max(1, Math.ceil(totalItems / perPage));
+      renderTasks(allTasks);
+      updatePaginationUI();
+      writeCachedPage(page, data);
+    }
+
+    // Render tasks in table: show only Task ID, User, Task Name, Status, Created At
     function renderTasks(tasks) {
       const table = document.getElementById("tasksTable");
       table.innerHTML = "";
       tasks.forEach((task, idx) => {
-        const checked = selectedTasks.has(idx) ? "checked" : "";
+        // Use stable row id based on task unique identifier so selection persists across pages
+        const globalIdx = (currentPage - 1) * perPage + idx;
+        const checked = selectedTasks.has(globalIdx) ? "checked" : "";
         const taskId = task.taskCode || task.id || ""; // Use taskCode as Task ID
         const user = task.username || task.user || "";
-        const name = (task.product && task.product.name) ? task.product.name : "";
+        const name = (task.product && task.product.name) ? task.product.name : (task.name || "");
         const status = task.status || "Pending";
-        // Use completedAt (main date of task), fall back to startedAt
         const createdAt = task.completedAt
           ? new Date(task.completedAt).toLocaleString()
-          : (task.startedAt ? new Date(task.startedAt).toLocaleString() : "");
-        table.innerHTML += `
-          <tr>
-            <td><input type="checkbox" onclick="selectTask(${idx}, this)" ${checked}></td>
-            <td>${taskId}</td>
-            <td>${user}</td>
-            <td>${name}</td>
-            <td>
-              <span class="status-badge ${status === 'Completed' ? 'status-active' : (status === 'Pending' ? 'status-danger' : 'status-suspended')}">
-                ${status}
-              </span>
-            </td>
-            <td>${createdAt}</td>
-            <td class="action-icons">
-              <button class="icon-btn" title="Edit" onclick="editTask(${idx})"><i class="fa fa-edit"></i></button>
-              <button class="icon-btn" title="Mark Complete" onclick="completeTask(${idx})"><i class="fa fa-check"></i></button>
-              <button class="icon-btn" title="Delete" onclick="deleteTask(${idx})"><i class="fa fa-trash"></i></button>
-            </td>
-          </tr>
+          : (task.startedAt ? new Date(task.startedAt).toLocaleString() : (task.createdAt ? new Date(task.createdAt).toLocaleString() : ""));
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><input type="checkbox" onclick="selectTask(${globalIdx}, this)" ${checked}></td>
+          <td>${escapeHtml(taskId)}</td>
+          <td>${escapeHtml(user)}</td>
+          <td>${escapeHtml(name)}</td>
+          <td>
+            <span class="status-badge ${status === 'Completed' ? 'status-active' : (status === 'Pending' ? 'status-danger' : 'status-suspended')}">
+              ${escapeHtml(status)}
+            </span>
+          </td>
+          <td>${escapeHtml(createdAt)}</td>
+          <td class="action-icons">
+            <button class="icon-btn" title="Edit" onclick="editTaskById('${encodeURIComponent(String(task.taskCode || task.id || ""))}', ${globalIdx})"><i class="fa fa-edit"></i></button>
+            <button class="icon-btn" title="Mark Complete" onclick="completeTaskById('${encodeURIComponent(String(task.taskCode || task.id || ""))}')"><i class="fa fa-check"></i></button>
+            <button class="icon-btn" title="Delete" onclick="deleteTaskById('${encodeURIComponent(String(task.taskCode || task.id || ""))}')"><i class="fa fa-trash"></i></button>
+          </td>
         `;
+        table.appendChild(row);
       });
       document.getElementById("bulkActions").style.display = selectedTasks.size > 0 ? "block" : "none";
     }
 
-    // Select/deselect task for bulk actions
-    function selectTask(idx, checkbox) {
-      if (checkbox.checked) selectedTasks.add(idx);
-      else selectedTasks.delete(idx);
+    // escape simple HTML
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return "";
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // Select/deselect task for bulk actions (global index)
+    function selectTask(globalIdx, checkbox) {
+      if (checkbox.checked) selectedTasks.add(globalIdx);
+      else selectedTasks.delete(globalIdx);
       document.getElementById("bulkActions").style.display = selectedTasks.size > 0 ? "block" : "none";
     }
     function toggleSelectAllTasks(master) {
       selectedTasks = new Set();
       if (master.checked) {
-        allTasks.forEach((_, idx) => selectedTasks.add(idx));
+        // select all visible on current page
+        allTasks.forEach((_, idx) => selectedTasks.add((currentPage - 1) * perPage + idx));
       }
       renderTasks(allTasks);
       document.getElementById("selectAllTasks").checked = master.checked;
     }
 
-    // Search (on username, product.name, or status)
+    // Search (local filter on current page for instant response)
     function searchTasks() {
       const query = document.getElementById("searchInput").value.toLowerCase();
+      if (!query) {
+        renderTasks(allTasks);
+        return;
+      }
       const filtered = allTasks.filter(task =>
         ((task.username || task.user || "").toLowerCase().includes(query)) ||
         ((task.product && task.product.name ? task.product.name : "").toLowerCase().includes(query)) ||
@@ -156,7 +338,7 @@
       renderTasks(filtered);
     }
 
-    // Add/Edit Task
+    // Add/Edit Task Modal logic (keeps previous behavior)
     function showAddTaskModal() {
       editingTaskIndex = null;
       document.getElementById("taskModalTitle").textContent = "Add Task";
@@ -167,122 +349,223 @@
       document.getElementById("taskModal").style.display = "none";
     }
 
+    // Helper to find task object by its id (taskCode or id) in current page or cached pages
+    function findTaskObjectById(encodedId) {
+      try {
+        const id = decodeURIComponent(encodedId);
+        // check current page first
+        let found = allTasks.find(t => String(t.taskCode || t.id) === id);
+        if (found) return found;
+        // else search cached pages quickly (cheap)
+        for (let p = 1; p <= Math.min(5, totalPages); p++) {
+          const cached = readCachedPage(p);
+          if (cached && cached.payload && Array.isArray(cached.payload.records)) {
+            found = cached.payload.records.find(t => String(t.taskCode || t.id) === id);
+            if (found) return found;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return null;
+    }
+
+    // Editing by id (preserves open modal behavior)
+    function editTaskById(encodedId, globalIdx) {
+      const task = findTaskObjectById(encodedId);
+      if (!task) return showToast('Task not found (try refreshing).');
+      editingTaskIndex = globalIdx;
+      document.getElementById("taskModalTitle").textContent = "Edit Task";
+      document.getElementById("modalUser").value = task.username || task.user || "";
+      document.getElementById("modalTaskName").value = (task.product && task.product.name) ? task.product.name : (task.name || "");
+      document.getElementById("modalStatus").value = task.status || "Pending";
+      document.getElementById("taskModal").style.display = "block";
+    }
+
+    // Complete / Delete by id (uses endpoint with id)
+    async function completeTaskById(encodedId) {
+      const id = decodeURIComponent(encodedId);
+      try {
+        await fetch(`/admin/tasks/${encodeURIComponent(id)}/complete`, {
+          method: 'PATCH',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+        showToast("Task marked as completed.");
+        // refresh current page quickly in background
+        fetchTasks(currentPage, { force: true }).catch(()=>{});
+      } catch (err) {
+        console.error('complete failed', err);
+        showToast("Failed to mark complete.");
+      }
+    }
+
+    async function deleteTaskById(encodedId) {
+      const id = decodeURIComponent(encodedId);
+      if (!confirm("Are you sure you want to delete this task?")) return;
+      try {
+        await fetch(`/admin/tasks/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        });
+        showToast("Task deleted.");
+        fetchTasks(currentPage, { force: true }).catch(()=>{});
+      } catch (err) {
+        console.error('delete failed', err);
+        showToast("Failed to delete task.");
+      }
+    }
+
+    // Form submit (Add / Edit) - uses API, then refreshes current page
     document.getElementById("taskForm").onsubmit = async function(e) {
       e.preventDefault();
       const user = document.getElementById("modalUser").value.trim();
       const name = document.getElementById("modalTaskName").value.trim();
       const status = document.getElementById("modalStatus").value;
 
-      if (editingTaskIndex !== null) {
-        // Edit
-        const task = allTasks[editingTaskIndex];
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-          method: 'PUT',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ user, name, status })
-        });
-        showToast("Task updated!");
-      } else {
-        // Add
-        await fetch('/admin/tasks', {
-          method: 'POST',
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-token": localStorage.getItem('adminToken')
-          },
-          body: JSON.stringify({ user, name, status })
-        });
-        showToast("Task added!");
+      try {
+        if (editingTaskIndex !== null) {
+          const globalIdx = editingTaskIndex;
+          const existing = allTasks[globalIdx - (currentPage - 1) * perPage];
+          const id = existing ? (existing.taskCode || existing.id) : null;
+          if (!id) throw new Error('Task id missing');
+          await fetch(`/admin/tasks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-token": localStorage.getItem('adminToken')
+            },
+            body: JSON.stringify({ user, name, status })
+          });
+          showToast("Task updated!");
+        } else {
+          await fetch('/admin/tasks', {
+            method: 'POST',
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-token": localStorage.getItem('adminToken')
+            },
+            body: JSON.stringify({ user, name, status })
+          });
+          showToast("Task added!");
+        }
+      } catch (err) {
+        console.error('save task error', err);
+        showToast("Failed to save task.");
+      } finally {
+        closeTaskModal();
+        fetchTasks(currentPage, { force: true }).catch(()=>{});
       }
-      closeTaskModal();
-      fetchTasks();
     };
 
-    function editTask(idx) {
-      editingTaskIndex = idx;
-      const task = allTasks[idx];
-      document.getElementById("taskModalTitle").textContent = "Edit Task";
-      document.getElementById("modalUser").value = task.username || task.user || "";
-      document.getElementById("modalTaskName").value = (task.product && task.product.name) ? task.product.name : "";
-      document.getElementById("modalStatus").value = task.status || "Pending";
-      document.getElementById("taskModal").style.display = "block";
-    }
-
-    // Mark complete
-    async function completeTask(idx) {
-      const task = allTasks[idx];
-      await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
-        method: 'PATCH',
-        headers: { "x-admin-token": localStorage.getItem('adminToken') }
-      });
-      showToast("Task marked as completed.");
-      fetchTasks();
-    }
-
-    // Delete task
-    async function deleteTask(idx) {
-      const task = allTasks[idx];
-      if (confirm("Are you sure you want to delete this task?")) {
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-          method: 'DELETE',
-          headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
-        showToast("Task deleted.");
-        fetchTasks();
-      }
-    }
-
-    // Bulk actions
+    // Bulk actions (perform in parallel, but limit concurrency to avoid overloading server)
     async function bulkCompleteTasks() {
-      for (let idx of selectedTasks) {
-        const task = allTasks[idx];
-        await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}/complete`, {
+      if (selectedTasks.size === 0) return;
+      const ids = Array.from(selectedTasks).map(globalIdxToId).filter(Boolean);
+      if (!ids.length) return showToast('No valid tasks selected.');
+      showToast('Processing...');
+      // run in small batches to avoid too many parallel requests
+      await runBatchedRequests(ids, async (id) => {
+        await fetch(`/admin/tasks/${encodeURIComponent(id)}/complete`, {
           method: 'PATCH',
           headers: { "x-admin-token": localStorage.getItem('adminToken') }
-        });
-      }
+        }).catch(()=>{});
+      }, 8);
       showToast("Selected tasks marked as completed.");
-      fetchTasks();
       selectedTasks.clear();
+      fetchTasks(currentPage, { force: true }).catch(()=>{});
     }
     async function bulkDeleteTasks() {
-      if (confirm("Are you sure you want to delete selected tasks?")) {
-        for (let idx of selectedTasks) {
-          const task = allTasks[idx];
-          await fetch(`/admin/tasks/${encodeURIComponent(task.taskCode || task.id)}`, {
-            method: 'DELETE',
-            headers: { "x-admin-token": localStorage.getItem('adminToken') }
-          });
-        }
-        selectedTasks.clear();
-        showToast("Selected tasks deleted.");
-        fetchTasks();
-      }
+      if (!confirm("Are you sure you want to delete selected tasks?")) return;
+      const ids = Array.from(selectedTasks).map(globalIdxToId).filter(Boolean);
+      if (!ids.length) return showToast('No valid tasks selected.');
+      showToast('Deleting...');
+      await runBatchedRequests(ids, async (id) => {
+        await fetch(`/admin/tasks/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { "x-admin-token": localStorage.getItem('adminToken') }
+        }).catch(()=>{});
+      }, 6);
+      selectedTasks.clear();
+      showToast("Selected tasks deleted.");
+      fetchTasks(currentPage, { force: true }).catch(()=>{});
     }
 
-    // Export tasks to CSV
+    function globalIdxToId(globalIdx) {
+      const pageIndex = globalIdx - (currentPage - 1) * perPage;
+      const item = allTasks[pageIndex];
+      if (item) return String(item.taskCode || item.id || "");
+      // if not in current page, try cached pages
+      for (let p = 1; p <= Math.min(10, totalPages); p++) {
+        const cached = readCachedPage(p);
+        if (cached && cached.payload && Array.isArray(cached.payload.records)) {
+          const idxInPage = globalIdx - (p - 1) * perPage;
+          if (idxInPage >= 0 && idxInPage < cached.payload.records.length) {
+            const it = cached.payload.records[idxInPage];
+            return String(it.taskCode || it.id || "");
+          }
+        }
+      }
+      return null;
+    }
+
+    async function runBatchedRequests(items, fn, concurrency = 5) {
+      const queue = items.slice();
+      const running = [];
+      const results = [];
+      while (queue.length || running.length) {
+        while (running.length < concurrency && queue.length) {
+          const item = queue.shift();
+          const p = fn(item).finally(() => {
+            const idx = running.indexOf(p);
+            if (idx !== -1) running.splice(idx, 1);
+          });
+          running.push(p);
+          results.push(p);
+        }
+        // wait for any to finish
+        await Promise.race(running).catch(()=>{});
+      }
+      return Promise.allSettled(results);
+    }
+
+    // Export tasks to CSV using current cached/allTasks (fast client-side)
     function exportTasksCSV() {
-      const csv = [
+      const rows = [
         ["Task ID", "User", "Task Name", "Status", "Created At"],
         ...allTasks.map(t => [
           t.taskCode || t.id || "",
           t.username || t.user || "",
-          t.product && t.product.name ? t.product.name : "",
+          t.product && t.product.name ? t.product.name : (t.name || ""),
           t.status || "",
-          t.completedAt ? new Date(t.completedAt).toLocaleString() : (t.startedAt ? new Date(t.startedAt).toLocaleString() : "")
+          t.completedAt ? new Date(t.completedAt).toLocaleString() : (t.startedAt ? new Date(t.startedAt).toLocaleString() : (t.createdAt ? new Date(t.createdAt).toLocaleString() : ""))
         ])
-      ].map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
+      ];
+      const csv = rows.map(row => row.map(String).map(s=>`"${s.replace(/"/g,'""')}"`).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "tasks.csv";
+      a.download = `tasks_page_${currentPage}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       showToast("Exported to CSV!");
+    }
+
+    // Pagination helpers
+    function updatePaginationUI() {
+      const info = document.getElementById('paginationInfo');
+      const pageText = document.getElementById('currentPageText');
+      const prevBtn = document.getElementById('prevPageBtn');
+      const nextBtn = document.getElementById('nextPageBtn');
+      if (!info || !pageText) return;
+      info.textContent = `Showing page ${currentPage} of ${totalPages} — total ${totalItems} items`;
+      pageText.textContent = `${currentPage} / ${totalPages}`;
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+      document.getElementById('paginationControls').style.display = totalPages > 1 ? 'flex' : 'none';
+    }
+    function changePage(page) {
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      fetchTasks(page).catch(()=>{});
     }
 
     // Toast and logout helpers
@@ -304,9 +587,42 @@
       }
     }
 
-    // Initial load
-    fetchTasks();
+    // Initial load: try to read cached page1 and render immediately, then fetch fresh page1
+    (function init() {
+      const cached = readCachedPage(1);
+      if (cached && cached.payload) {
+        processFetchedPage(1, cached.payload);
+      } else {
+        // show a brief spinner if no cache
+        setLoadingIndicator(true);
+      }
+      // Now fetch fresh data for page 1 but don't block UI (will update when returns)
+      fetchTasks(1, { force: true }).catch((err) => {
+        // if fetch failed, hide spinner and possibly let user know
+        setLoadingIndicator(false);
+        console.error('Initial fetch failed', err);
+      });
+
+      // Prefetch page 2 in background if exists
+      setTimeout(()=>{ fetchTasks(2).catch(()=>{}); }, 1200);
+    })();
+
+    // Expose some functions to global scope used in inline handlers
+    window.fetchTasks = fetchTasks;
+    window.editTask = (idx) => editTaskById(encodeURIComponent(String(allTasks[idx] ? (allTasks[idx].taskCode || allTasks[idx].id || "") : "")), idx);
+    window.completeTask = (idx) => completeTaskById(encodeURIComponent(String(allTasks[idx] ? (allTasks[idx].taskCode || allTasks[idx].id || "") : "")));
+    window.deleteTask = (idx) => deleteTaskById(encodeURIComponent(String(allTasks[idx] ? (allTasks[idx].taskCode || allTasks[idx].id || "") : "")));
+    window.bulkCompleteTasks = bulkCompleteTasks;
+    window.bulkDeleteTasks = bulkDeleteTasks;
+    window.selectTask = selectTask;
+    window.toggleSelectAllTasks = toggleSelectAllTasks;
+    window.showAddTaskModal = showAddTaskModal;
+    window.closeTaskModal = closeTaskModal;
+    window.exportTasksCSV = exportTasksCSV;
+    window.searchTasks = searchTasks;
+
   </script>
+
 <script>
 window.addEventListener("message", function(event) {
   if (event.data && event.data.type === "setDarkMode") {
