@@ -150,7 +150,10 @@ try {
     });
   });
 
-  // Minimal login endpoint — mirrors the behavior of routes/api.js login handler
+  // Minimal login endpoint — mirrors the behavior of routes/api.js login handler,
+  // but avoids calling `user.save()` to prevent DocumentNotFoundError when _id types
+  // don't match the Mongoose model's expectation. We update the token via the
+  // native MongoDB collection API to avoid Mongoose casting.
   fallbackApi.post('/login', async (req, res) => {
     try {
       const input = req.body.input || req.body.username || "";
@@ -166,16 +169,50 @@ try {
       const user = await User.findOne({
         $or: [{ username: input }, { phone: input }],
         loginPassword: password
-      });
+      }).lean ? await User.findOne({ $or: [{ username: input }, { phone: input }], loginPassword: password }) : await User.findOne({ $or: [{ username: input }, { phone: input }], loginPassword: password });
 
       if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
       if (user.suspended) return res.status(403).json({ success: false, message: 'Account suspended' });
 
-      user.token = crypto.randomBytes(24).toString('hex');
-      await user.save();
+      // Generate token and update via native driver to avoid Mongoose _id casting problems
+      const newToken = crypto.randomBytes(24).toString('hex');
 
-      // Return the user object (same shape as main route), but avoid loading heavy dependencies here.
+      try {
+        // Try updating using the raw collection with the exact _id value we received.
+        // This avoids Mongoose casting _id to ObjectId which can fail when documents
+        // actually use string _id values.
+        const coll = mongoose.connection.db.collection('users');
+        let updateResult = await coll.updateOne(
+          { _id: user._id },
+          { $set: { token: newToken } }
+        );
+
+        // If no match (possible type mismatch), attempt a string-cast of _id as a fallback.
+        if (updateResult.matchedCount === 0) {
+          updateResult = await coll.updateOne(
+            { _id: String(user._id) },
+            { $set: { token: newToken } }
+          );
+        }
+
+        // If still no match, attempt to update by username as a last resort (shouldn't be necessary)
+        if (updateResult.matchedCount === 0 && user.username) {
+          updateResult = await coll.updateOne(
+            { username: user.username },
+            { $set: { token: newToken } }
+          );
+        }
+
+        // reflect token in returned user object (don't rely on user.save())
+        user.token = newToken;
+      } catch (err) {
+        console.error('Fallback native update token error:', err && err.stack ? err.stack : err);
+        // still return success? better to surface error
+        return res.status(500).json({ success: false, message: 'Failed to update token', error: err && err.message ? err.message : String(err) });
+      }
+
+      // Return the user object (same shape as main route)
       return res.json({ success: true, user });
     } catch (err) {
       console.error('Fallback /api/login error:', err && err.stack ? err.stack : err);
