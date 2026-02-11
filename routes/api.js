@@ -1213,7 +1213,7 @@ router.post('/admin/set-platform-status', async (req, res) => {
     // allowList can be array or comma-separated string; store into whoCanAccessDuringClose
     if (Array.isArray(allowList)) {
       updates.whoCanAccessDuringClose = allowList;
-    } else if (typeof allowList === 'string' and allowList.trim()) {
+    } else if (typeof allowList === 'string' && allowList.trim()) {
       updates.whoCanAccessDuringClose = allowList.split(',').map(s => s.trim()).filter(Boolean);
     }
 
