@@ -69,8 +69,8 @@ const Session = mongoose.models.Session || mongoose.model('Session', sessionSche
 
 cloudinary.config({
     cloud_name: 'dhubpqnss',
-    api_key: '129672528218384',
-    api_secret: 'J8SEWj1hzBs8uTclbOtntG7G_8E'
+    api_key: '983286743251596',
+    api_secret: 'zeU4nedVzVzvqqndh2MF82AdRiI'
 });
 
 // ========== Product cache & helpers (pre-warm + in-flight dedupe + periodic refresh) ==========
