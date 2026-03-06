@@ -68,9 +68,10 @@ const sessionSchema = new mongoose.Schema({
 const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
 
 cloudinary.config({
-    cloud_name: 'dhubpqnss',
-    api_key: '983286743251596',
-    api_secret: 'zeU4nedVzVzvqqndh2MF82AdRiI'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dycytqdfj',
+    api_key: process.env.CLOUDINARY_API_KEY || '983286743251596',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'zeU4nedVzVzvqqndh2MF82AdRiI',
+    secure: true
 });
 
 // ========== Product cache & helpers (pre-warm + in-flight dedupe + periodic refresh) ==========
@@ -79,44 +80,139 @@ let cachedProducts = [];
 let lastCloudinaryFetch = 0;
 let cloudinaryFetchInFlight = null; // promise for dedupe
 
+// Helper: extract price using multiple heuristics (context, tags, public_id)
+function extractPriceFromResource(r) {
+  if (!r) return undefined;
+
+  // 1) context.custom.price preferred
+  if (r.context && r.context.custom && typeof r.context.custom.price !== 'undefined' && r.context.custom.price !== 'N/A') {
+    const p = parseFloat(String(r.context.custom.price).replace(/[^\d.]/g, ''));
+    if (!Number.isNaN(p)) return p;
+  }
+
+  // 2) tags like price_123 or price-123
+  if (Array.isArray(r.tags) && r.tags.length) {
+    for (const t of r.tags) {
+      if (!t) continue;
+      const mTag = String(t).match(/^price[_-]?(\d+(?:\.\d+)?)$/i);
+      if (mTag) {
+        const p = parseFloat(mTag[1]);
+        if (!Number.isNaN(p)) return p;
+      }
+    }
+  }
+
+  // 3) trailing-numeric-tokens heuristic on public_id
+  if (typeof r.public_id === 'string') {
+    const parts = r.public_id.split('_').filter(Boolean);
+    const trailing = [];
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const t = parts[i];
+      if (/^\d+$/.test(t)) {
+        trailing.unshift(t);
+        if (trailing.length >= 3) break;
+      } else break;
+    }
+    if (trailing.length >= 2) {
+      const intPart = trailing[trailing.length - 2];
+      const fracPart = trailing[trailing.length - 1];
+      const cand = parseFloat(`${intPart}.${fracPart}`);
+      if (!Number.isNaN(cand)) return cand;
+    } else if (trailing.length === 1) {
+      const cand = parseFloat(trailing[0]);
+      if (!Number.isNaN(cand)) return cand;
+    }
+
+    // fallback: longest numeric token anywhere
+    const tokens = (r.public_id.match(/\d+/g) || []).map(s => s.replace(/^0+/, '') || '0');
+    if (tokens.length) {
+      tokens.sort((a, b) => {
+        if (b.length !== a.length) return b.length - a.length;
+        return Number(b) - Number(a);
+      });
+      const cand = parseFloat(tokens[0]);
+      if (!Number.isNaN(cand)) return cand;
+    }
+  }
+
+  return undefined;
+}
+
+// Helper: generate a random price between min and max (two decimals)
+function generateRandomPrice(min = 10, max = 100) {
+  const lo = Number(min) || 10;
+  const hi = Number(max) || 100;
+  const v = Math.random() * (hi - lo) + lo;
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
 async function fetchProductsFromCloudinary() {
   if (cloudinaryFetchInFlight) return cloudinaryFetchInFlight;
 
   cloudinaryFetchInFlight = (async () => {
+    const prefixEnv = (process.env.CLOUDINARY_PRODUCTS_PREFIX || 'products/').toString();
     let products = [];
     let next_cursor = undefined;
+
     try {
       do {
-        const result = await cloudinary.api.resources({
+        const opts = {
           type: 'upload',
-          prefix: 'products/',
-          max_results: 1000,
+          max_results: 500,
           context: true,
           tags: true,
           ...(next_cursor ? { next_cursor } : {})
-        });
+        };
+        if (prefixEnv) opts.prefix = prefixEnv;
 
-        const pageProducts = (result.resources || [])
-          .filter(r =>
-            r.context && r.context.custom &&
-            r.context.custom.caption &&
-            r.context.custom.price && r.context.custom.price !== "N/A" &&
-            r.secure_url
-          )
-          .map(r => ({
+        const result = await cloudinary.api.resources(opts);
+        const pageProducts = (result.resources || []).map(r => {
+          const name = (r.context && r.context.custom && (r.context.custom.caption || r.context.custom.name))
+            || r.filename
+            || (typeof r.public_id === 'string' ? r.public_id.split('/').pop() : r.public_id);
+
+          const description = (r.context && r.context.custom && (r.context.custom.alt || r.context.custom.description)) || '';
+
+          const price = extractPriceFromResource(r);
+          const finalPrice = (typeof price === 'number' && !Number.isNaN(price)) ? Number(price) : undefined;
+
+          return {
             image: r.secure_url,
-            name: r.context.custom.caption,
-            price: parseFloat(r.context.custom.price),
-            description: r.context.custom.alt || "",
+            name,
+            price: finalPrice,
+            description,
             public_id: r.public_id
-          }));
+          };
+        }).filter(p => p.image); // only keep items with url
 
         products = products.concat(pageProducts);
         next_cursor = result.next_cursor;
       } while (next_cursor);
 
+      // Assign reasonable random prices to items lacking a numeric price
+      const numericPrices = products.map(p => p.price).filter(v => typeof v === 'number' && !Number.isNaN(v));
+      let median = 25;
+      if (numericPrices.length) {
+        numericPrices.sort((a, b) => a - b);
+        median = numericPrices[Math.floor(numericPrices.length / 2)];
+      }
+      const randMin = Math.max(1, median * 0.5);
+      const randMax = Math.max(randMin + 1, median * 1.5);
+
+      let randomAssignedCount = 0;
+      products = products.map(p => {
+        if (typeof p.price !== 'number' || Number.isNaN(p.price)) {
+          randomAssignedCount++;
+          return { ...p, price: generateRandomPrice(randMin, randMax), _priceAssigned: 'random' };
+        }
+        return { ...p, _priceAssigned: 'extracted' };
+      });
+
       cachedProducts = products;
       lastCloudinaryFetch = Date.now();
+
+      console.log(`Cloudinary fetch: loaded ${cachedProducts.length} product(s) (prefix='${prefixEnv}'). numeric:${numericPrices.length}; randomAssigned:${randomAssignedCount}`);
+
       return cachedProducts;
     } finally {
       cloudinaryFetchInFlight = null;
@@ -182,7 +278,6 @@ setInterval(() => {
     console.warn('Periodic Cloudinary refresh failed:', err && err.message ? err.message : err);
   });
 }, CLOUDINARY_CACHE_DURATION);
-
 // ========== Utility & config ==========
 const MIN_STARTING_CAPITAL_PERCENT = 0.30; // 30%
 
