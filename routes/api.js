@@ -8,10 +8,40 @@ const { distributeReferralCommission } = require('./commissionService');
 
 const router = express.Router();
 
-// New: IP + geo helpers and event model
-const getClientIp = require('../server/utils/getClientIp'); // adjusted path to new utils
-const { geoLookup } = require('../server/utils/geoLookup');
-const LoginEvent = require('../server/models/LoginEvent');
+// ========== IP / GEO helpers & LoginEvent model (defensive requires) ==========
+let getClientIp;
+let geoLookup;
+let LoginEvent;
+
+try {
+  // routes/api.js lives in src/routes/ so server utilities are located at ../../server/...
+  getClientIp = require('../../server/utils/getClientIp');
+} catch (err) {
+  console.warn('getClientIp not found; requests will fallback to req.ip. Error:', err && err.message ? err.message : err);
+  getClientIp = function (req) { return (req && (req.ip || (req.connection && req.connection.remoteAddress))) || null; };
+}
+
+try {
+  // geoLookup returns a promise (async) — our implementation supports both sync and async usage.
+  geoLookup = require('../../server/utils/geoLookup').geoLookup;
+} catch (err) {
+  console.warn('geoLookup not found; IP->location resolution will be limited. Error:', err && err.message ? err.message : err);
+  geoLookup = async function () { return null; };
+}
+
+try {
+  LoginEvent = require('../../server/models/LoginEvent');
+} catch (err) {
+  console.warn('LoginEvent model not found; falling back to a stub. Error:', err && err.message ? err.message : err);
+  // stub with same create signature so calls don't fail
+  LoginEvent = {
+    create: async (doc) => {
+      // in stub mode, simply log to server console and return a pseudo-document
+      console.warn('LoginEvent stub: event not persisted because LoginEvent model is missing. event:', doc && typeof doc === 'object' ? JSON.stringify(doc).slice(0, 200) : String(doc));
+      return { _id: null, ...doc, createdAt: new Date().toISOString() };
+    }
+  };
+}
 
 // ========== MODELS WITH EXPLICIT SCHEMA ==========
 const userSchema = new mongoose.Schema({
@@ -646,8 +676,8 @@ router.post('/users/register', async (req, res) => {
 
       // --- New: record register event (IP + geo) and notify admin sockets ---
       try {
-        const ip = getClientIp(req) || (req.ip || req.connection?.remoteAddress || '');
-        const geo = geoLookup(ip);
+        const ip = getClientIp(req) || (req.ip || (req.connection && req.connection.remoteAddress) || '');
+        const geo = await geoLookup(ip);
         const userAgent = req.headers['user-agent'] || '';
 
         const evt = await LoginEvent.create({
@@ -699,8 +729,8 @@ router.post('/users/register', async (req, res) => {
 
           // --- New: also log/register event for fallback-created user ---
           try {
-            const ip2 = getClientIp(req) || (req.ip || req.connection?.remoteAddress || '');
-            const geo2 = geoLookup(ip2);
+            const ip2 = getClientIp(req) || (req.ip || (req.connection && req.connection.remoteAddress) || '');
+            const geo2 = await geoLookup(ip2);
             const userAgent2 = req.headers['user-agent'] || '';
 
             const evt2 = await LoginEvent.create({
@@ -769,7 +799,7 @@ router.post('/login', async (req, res) => {
       token: sessionToken,
       userId: user._id,
       userAgent: req.headers['user-agent'] || '',
-      ip: req.ip || req.connection?.remoteAddress || '',
+      ip: req.ip || (req.connection && req.connection.remoteAddress) || '',
       createdAt: new Date().toISOString(),
       lastUsedAt: null,
       // optional: set expiry (e.g. 30 days)
@@ -782,7 +812,7 @@ router.post('/login', async (req, res) => {
       // --- New: record login event (IP + geo) and emit to admins ---
       try {
         const ip = getClientIp(req) || sessionDoc.ip || '';
-        const geo = geoLookup(ip);
+        const geo = await geoLookup(ip);
         const userAgent = req.headers['user-agent'] || '';
 
         const evt = await LoginEvent.create({
@@ -1635,15 +1665,4 @@ router.get('/notifications', verifyUserToken, async (req, res) => {
     res.json({ success: true, notifications });
 });
 
-router.post('/admin/notification', async (req, res) => {
-    const { title, message } = req.body;
-    await Notification.create({
-        id: Date.now(),
-        title,
-        message,
-        date: new Date().toISOString()
-    });
-    res.json({ success: true });
-});
-
-module.exports = router;
+router.post](#)*
