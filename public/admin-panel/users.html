@@ -188,6 +188,9 @@
       visibility: visible;
       opacity: 1;
     }
+
+    /* VIP modal for list/bulk operations (page-scoped, not drawer-scoped) */
+    .vip-modal .modal-content { max-width: 360px; }
   </style>
 </head>
 <body>
@@ -208,6 +211,7 @@
           <input type="text" id="searchInput" placeholder="Search by username or phone..." oninput="searchUsers()" />
           <button class="add-btn" onclick="showAddUserModal()"><i class="fa fa-user-plus"></i> Add User</button>
           <button class="export-btn" onclick="exportUsersCSV()"><i class="fa fa-download"></i> Export CSV</button>
+          <button class="export-btn" onclick="openVipModalBulk()" title="Manage VIPs"><i class="fa fa-star"></i> VIP</button>
         </div>
         <div class="table-responsive">
           <table>
@@ -234,6 +238,8 @@
         <div class="bulk-actions" id="bulkActions" style="display:none;">
           <button class="bulk-btn" onclick="bulkSuspendUsers()"><i class="fa fa-user-slash"></i> Suspend Selected</button>
           <button class="bulk-btn" onclick="bulkDeleteUsers()"><i class="fa fa-trash"></i> Delete Selected</button>
+          <button class="bulk-btn" onclick="bulkUpgradeVip()"><i class="fa fa-arrow-up"></i> Upgrade VIP</button>
+          <button class="bulk-btn" onclick="bulkDowngradeVip()"><i class="fa fa-arrow-down"></i> Downgrade VIP</button>
         </div>
       </section>
     </main>
@@ -480,6 +486,22 @@
     </div>
   </div>
 
+  <!-- VIP Modal for list/bulk operations (page-scoped) -->
+  <div class="modal vip-modal" id="vipModal" style="display:none;">
+    <div class="modal-content">
+      <span class="close" onclick="closeVipModal()">&times;</span>
+      <h3 id="vipModalTitle">Edit VIP Level</h3>
+      <form id="vipForm">
+        <input type="text" id="vip_modalUsername" placeholder="Username" readonly />
+        <input type="number" id="vip_modalVipLevel" placeholder="VIP Level" min="1" max="10" required />
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button type="submit" class="add-btn">Save</button>
+          <button type="button" onclick="closeVipModal()" style="padding:8px;border-radius:6px;border:1px solid #ddd;background:#eee;">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script>
@@ -501,6 +523,21 @@
         if (!res.ok) throw new Error('Unauthorized');
         allUsers = await res.json();
         renderUsers(allUsers);
+
+        // If this page was opened with #user=..., auto-open that user in drawer
+        try {
+          const hash = window.location.hash || '';
+          if (hash && hash.includes('user=')) {
+            const params = new URLSearchParams(hash.replace(/^#/, ''));
+            const u = params.get('user');
+            if (u) {
+              // small timeout to ensure UI rendered
+              setTimeout(() => {
+                openUserPage(decodeURIComponent(u));
+              }, 240);
+            }
+          }
+        } catch (e) {}
       } catch (err) {
         alert("Session expired or unauthorized. Please login again.");
         logout();
@@ -538,6 +575,7 @@
             <td>${user.walletAddress || ""}</td>
             <td class="action-icons">
               <button class="icon-btn" title="Open" onclick="openUserPage('${escUsername}')"><i class="fa fa-eye"></i></button>
+              <button class="icon-btn" title="Edit VIP" onclick="openVipModal('${escUsername}')"><i class="fa fa-star"></i></button>
               <button class="icon-btn" title="Edit" onclick="editUser('${escUsername}')"><i class="fa fa-edit"></i></button>
               <button class="icon-btn" title="Suspend" onclick="suspendUser('${escUsername}')"><i class="fa fa-user-slash"></i></button>
               <button class="icon-btn" title="Delete" onclick="deleteUser('${escUsername}')"><i class="fa fa-trash"></i></button>
@@ -619,9 +657,8 @@
       document.getElementById("modalExchange").value = "";
       document.getElementById("modalWalletAddress").value = "";
       document.getElementById("modalCreatedAt").value = "";
-      // Ensure drawer is visible so modal appears inside it
-      document.getElementById('userDetailPanel').classList.add('show');
-      document.getElementById('userModal').style.display = "flex";
+      document.getElementById("userDetailPanel").classList.add('show');
+      document.getElementById("userModal").style.display = "flex";
     }
     function closeUserModal() {
       document.getElementById("userModal").style.display = "none";
@@ -771,7 +808,6 @@
       document.getElementById("modalExchange").value = user.exchange || "";
       document.getElementById("modalWalletAddress").value = user.walletAddress || "";
       document.getElementById("modalToken").value = user.token || "";
-      // Ensure drawer shown
       document.getElementById('userDetailPanel').classList.add('show');
       document.getElementById("userModal").style.display = "flex";
     }
@@ -894,17 +930,6 @@
       showToast("Exported to CSV!");
     }
 
-    function showToast(msg) {
-      const toast = document.getElementById("toast");
-      toast.textContent = msg;
-      toast.className = "toast show";
-      setTimeout(() => { toast.className = "toast"; }, 3000);
-    }
-    function logout() {
-      localStorage.removeItem("adminToken");
-      window.location.href = "/admin-panel/login.html";
-    }
-
     // -- User detail panel logic and collapsible sections --
 
     async function fetchUser(username) {
@@ -924,6 +949,10 @@
         panel.classList.add('show');
         collapseAllSections();
         await loadUserDetail(username);
+        // Update URL hash so index.html iframe linking works/back navigation
+        try {
+          history.replaceState(null, '', '#user=' + encodeURIComponent(username));
+        } catch (e) {}
       } catch (err) {
         console.error('openUserPage error', err);
         showToast('Failed to open user; refresh and try again.');
@@ -935,9 +964,10 @@
       panel.classList.remove('show');
       panel.setAttribute('aria-hidden', 'true');
       document.getElementById('inlineForms').innerHTML = '';
-      // hide modals if open
       document.getElementById('comboModal').style.display = 'none';
       document.getElementById('userModal').style.display = 'none';
+      // clear hash
+      try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
     }
 
     function collapseAllSections() {
@@ -1130,7 +1160,6 @@
           if (!res.ok) { showToast('Reject failed'); return; }
           showToast('Withdrawal rejected');
         } else {
-          // set to Pending via PUT update
           const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}`, {
             method: 'PUT',
             headers: { "Content-Type": "application/json", "x-admin-token": localStorage.getItem('adminToken') },
@@ -1139,11 +1168,9 @@
           if (!res.ok) { showToast('Failed to set pending'); return; }
           showToast('Withdrawal set to pending');
         }
-        // refresh list and panel summaries
         if (document.getElementById('withdrawalsContent').classList.contains('show')) {
           await loadWithdrawalsForDetail(window._currentDetailUser);
         }
-        // update summary counts
         const wdCount = await fetchUserWithdrawalsCount(window._currentDetailUser);
         document.getElementById('withdrawalsSummary').textContent = wdCount ? `(${wdCount} withdrawal${wdCount>1?'s':''})` : '(no withdrawals)';
       } catch (e) {
@@ -1152,7 +1179,7 @@
       }
     }
 
-    // Inline: Assign combo/add balance/update VIP/reset tasks/etc (modals are scoped to drawer)
+    // --- Inline: Assign combo/add balance/update VIP/reset tasks/etc (modals are scoped to drawer)
 
     function openAssignComboForDetail() {
       const username = window._currentDetailUser;
@@ -1452,6 +1479,96 @@
           modal.style.display = 'none';
         }
       });
+    });
+
+    // --- VIP modal (list/bulk) functions ---
+
+    function openVipModal(username) {
+      document.getElementById('vipModal').style.display = 'flex';
+      document.getElementById('vip_modalUsername').value = username || '';
+      if (username) {
+        const user = allUsers.find(u => u.username === username);
+        document.getElementById('vip_modalVipLevel').value = user && user.vipLevel != null ? user.vipLevel : 1;
+      } else {
+        document.getElementById('vip_modalVipLevel').value = 1;
+      }
+      document.getElementById('vipModalTitle').textContent = username ? `Edit VIP for ${username}` : 'Edit VIP Level';
+    }
+
+    function closeVipModal() {
+      document.getElementById('vipModal').style.display = 'none';
+    }
+
+    document.getElementById('vipForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const username = document.getElementById('vip_modalUsername').value;
+      const vip = parseInt(document.getElementById('vip_modalVipLevel').value, 10);
+      if (!username || isNaN(vip) || vip < 1) return;
+      try {
+        const res = await fetch('/admin/update-vip', {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ username, vip })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(()=>({}));
+          showToast('Failed to update VIP: ' + (err.message || res.statusText));
+          return;
+        }
+        showToast('VIP level updated!');
+        closeVipModal();
+        fetchUsers();
+      } catch (e) {
+        showToast('Network error updating VIP');
+      }
+    });
+
+    function openVipModalBulk() {
+      // open with no username (admin can set for selected users via bulk buttons)
+      openVipModal('');
+    }
+
+    async function bulkUpgradeVip() {
+      for (let username of selectedUsers) {
+        const user = allUsers.find(u => u.username === username);
+        const newVip = Math.min((user.vipLevel || 1) + 1, 10);
+        await fetch('/admin/update-vip', {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ username: user.username, vip: newVip })
+        });
+      }
+      showToast("Selected users upgraded!");
+      fetchUsers();
+      selectedUsers.clear();
+    }
+    async function bulkDowngradeVip() {
+      for (let username of selectedUsers) {
+        const user = allUsers.find(u => u.username === username);
+        const newVip = Math.max((user.vipLevel || 1) - 1, 1);
+        await fetch('/admin/update-vip', {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-token": localStorage.getItem('adminToken')
+          },
+          body: JSON.stringify({ username: user.username, vip: newVip })
+        });
+      }
+      showToast("Selected users downgraded!");
+      fetchUsers();
+      selectedUsers.clear();
+    }
+
+    // close list-wide modals on outside click
+    document.getElementById('vipModal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('vipModal')) closeVipModal();
     });
 
     // initial load
