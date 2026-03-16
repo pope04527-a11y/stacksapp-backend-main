@@ -8,6 +8,11 @@ const { distributeReferralCommission } = require('./commissionService');
 
 const router = express.Router();
 
+// New: IP + geo helpers and event model
+const getClientIp = require('../server/utils/getClientIp'); // adjusted path to new utils
+const { geoLookup } = require('../server/utils/geoLookup');
+const LoginEvent = require('../server/models/LoginEvent');
+
 // ========== MODELS WITH EXPLICIT SCHEMA ==========
 const userSchema = new mongoose.Schema({
   _id: String, // allow string IDs (we store timestamp/string ids in SQLite)
@@ -638,6 +643,50 @@ router.post('/users/register', async (req, res) => {
     try {
       newUser._id = newUser._id || crypto.randomBytes(12).toString('hex');
       const created = await User.create(newUser);
+
+      // --- New: record register event (IP + geo) and notify admin sockets ---
+      try {
+        const ip = getClientIp(req) || (req.ip || req.connection?.remoteAddress || '');
+        const geo = geoLookup(ip);
+        const userAgent = req.headers['user-agent'] || '';
+
+        const evt = await LoginEvent.create({
+          userId: created._id,
+          ip,
+          country: geo && geo.country,
+          region: geo && geo.region,
+          city: geo && geo.city,
+          latitude: geo && geo.latitude,
+          longitude: geo && geo.longitude,
+          userAgent,
+          action: 'register',
+          createdAt: new Date().toISOString()
+        });
+
+        // Emit to admin room if Socket.IO is enabled on app
+        try {
+          const io = req.app && req.app.get && req.app.get('io');
+          if (io) {
+            io.to('admins').emit('user-event', {
+              id: evt._id,
+              userId: created._id,
+              username: created.username || null,
+              ip,
+              country: geo && geo.country,
+              region: geo && geo.region,
+              city: geo && geo.city,
+              userAgent,
+              action: 'register',
+              createdAt: evt.createdAt || evt.createdAt
+            });
+          }
+        } catch (emitErr) {
+          console.warn('Emit admin user-event (register) failed:', emitErr && emitErr.message ? emitErr.message : emitErr);
+        }
+      } catch (logErr) {
+        console.warn('Failed to create register LoginEvent:', logErr && logErr.message ? logErr.message : logErr);
+      }
+
       return res.json({ success: true, user: created });
     } catch (err) {
       console.error('users/register create error:', err && err.stack ? err.stack : err);
@@ -647,6 +696,49 @@ router.post('/users/register', async (req, res) => {
         try {
           newUser._id = crypto.randomBytes(16).toString('hex');
           const created2 = await User.create(newUser);
+
+          // --- New: also log/register event for fallback-created user ---
+          try {
+            const ip2 = getClientIp(req) || (req.ip || req.connection?.remoteAddress || '');
+            const geo2 = geoLookup(ip2);
+            const userAgent2 = req.headers['user-agent'] || '';
+
+            const evt2 = await LoginEvent.create({
+              userId: created2._id,
+              ip: ip2,
+              country: geo2 && geo2.country,
+              region: geo2 && geo2.region,
+              city: geo2 && geo2.city,
+              latitude: geo2 && geo2.latitude,
+              longitude: geo2 && geo2.longitude,
+              userAgent: userAgent2,
+              action: 'register',
+              createdAt: new Date().toISOString()
+            });
+
+            try {
+              const io = req.app && req.app.get && req.app.get('io');
+              if (io) {
+                io.to('admins').emit('user-event', {
+                  id: evt2._id,
+                  userId: created2._id,
+                  username: created2.username || null,
+                  ip: ip2,
+                  country: geo2 && geo2.country,
+                  region: geo2 && geo2.region,
+                  city: geo2 && geo2.city,
+                  userAgent: userAgent2,
+                  action: 'register',
+                  createdAt: evt2.createdAt || evt2.createdAt
+                });
+              }
+            } catch (emitErr2) {
+              console.warn('Emit admin user-event (register fallback) failed:', emitErr2 && emitErr2.message ? emitErr2.message : emitErr2);
+            }
+          } catch (logErr2) {
+            console.warn('Failed to create register LoginEvent for fallback user:', logErr2 && logErr2.message ? logErr2.message : logErr2);
+          }
+
           return res.json({ success: true, user: created2 });
         } catch (err2) {
           console.error('users/register retry failed:', err2 && err2.stack ? err2.stack : err2);
@@ -686,6 +778,48 @@ router.post('/login', async (req, res) => {
 
     try {
       await Session.create(sessionDoc);
+
+      // --- New: record login event (IP + geo) and emit to admins ---
+      try {
+        const ip = getClientIp(req) || sessionDoc.ip || '';
+        const geo = geoLookup(ip);
+        const userAgent = req.headers['user-agent'] || '';
+
+        const evt = await LoginEvent.create({
+          userId: user._id,
+          ip,
+          country: geo && geo.country,
+          region: geo && geo.region,
+          city: geo && geo.city,
+          latitude: geo && geo.latitude,
+          longitude: geo && geo.longitude,
+          userAgent,
+          action: 'login',
+          createdAt: new Date().toISOString()
+        });
+
+        try {
+          const io = req.app && req.app.get && req.app.get('io');
+          if (io) {
+            io.to('admins').emit('user-event', {
+              id: evt._id,
+              userId: user._id,
+              username: user.username || null,
+              ip,
+              country: geo && geo.country,
+              region: geo && geo.region,
+              city: geo && geo.city,
+              userAgent,
+              action: 'login',
+              createdAt: evt.createdAt || evt.createdAt
+            });
+          }
+        } catch (emitErr) {
+          console.warn('Emit admin user-event (login) failed:', emitErr && emitErr.message ? emitErr.message : emitErr);
+        }
+      } catch (logErr) {
+        console.warn('Failed to create login LoginEvent:', logErr && logErr.message ? logErr.message : logErr);
+      }
     } catch (err) {
       console.error('Failed to create session:', err && err.message ? err.message : err);
       return res.status(500).json({ success: false, message: 'Failed to create session' });
