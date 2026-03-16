@@ -8,41 +8,6 @@ const { distributeReferralCommission } = require('./commissionService');
 
 const router = express.Router();
 
-// ========== IP / GEO helpers & LoginEvent model (defensive requires) ==========
-let getClientIp;
-let geoLookup;
-let LoginEvent;
-
-try {
-  // routes/api.js lives in src/routes/ so server utilities are located at ../../server/...
-  getClientIp = require('../../server/utils/getClientIp');
-} catch (err) {
-  console.warn('getClientIp not found; requests will fallback to req.ip. Error:', err && err.message ? err.message : err);
-  getClientIp = function (req) { return (req && (req.ip || (req.connection && req.connection.remoteAddress))) || null; };
-}
-
-try {
-  // geoLookup returns a promise (async) — our implementation supports both sync and async usage.
-  geoLookup = require('../../server/utils/geoLookup').geoLookup;
-} catch (err) {
-  console.warn('geoLookup not found; IP->location resolution will be limited. Error:', err && err.message ? err.message : err);
-  geoLookup = async function () { return null; };
-}
-
-try {
-  LoginEvent = require('../../server/models/LoginEvent');
-} catch (err) {
-  console.warn('LoginEvent model not found; falling back to a stub. Error:', err && err.message ? err.message : err);
-  // stub with same create signature so calls don't fail
-  LoginEvent = {
-    create: async (doc) => {
-      // in stub mode, simply log to server console and return a pseudo-document
-      console.warn('LoginEvent stub: event not persisted because LoginEvent model is missing. event:', doc && typeof doc === 'object' ? JSON.stringify(doc).slice(0, 200) : String(doc));
-      return { _id: null, ...doc, createdAt: new Date().toISOString() };
-    }
-  };
-}
-
 // ========== MODELS WITH EXPLICIT SCHEMA ==========
 const userSchema = new mongoose.Schema({
   _id: String, // allow string IDs (we store timestamp/string ids in SQLite)
@@ -673,50 +638,6 @@ router.post('/users/register', async (req, res) => {
     try {
       newUser._id = newUser._id || crypto.randomBytes(12).toString('hex');
       const created = await User.create(newUser);
-
-      // --- New: record register event (IP + geo) and notify admin sockets ---
-      try {
-        const ip = getClientIp(req) || (req.ip || (req.connection && req.connection.remoteAddress) || '');
-        const geo = await geoLookup(ip);
-        const userAgent = req.headers['user-agent'] || '';
-
-        const evt = await LoginEvent.create({
-          userId: created._id,
-          ip,
-          country: geo && geo.country,
-          region: geo && geo.region,
-          city: geo && geo.city,
-          latitude: geo && geo.latitude,
-          longitude: geo && geo.longitude,
-          userAgent,
-          action: 'register',
-          createdAt: new Date().toISOString()
-        });
-
-        // Emit to admin room if Socket.IO is enabled on app
-        try {
-          const io = req.app && req.app.get && req.app.get('io');
-          if (io) {
-            io.to('admins').emit('user-event', {
-              id: evt._id,
-              userId: created._id,
-              username: created.username || null,
-              ip,
-              country: geo && geo.country,
-              region: geo && geo.region,
-              city: geo && geo.city,
-              userAgent,
-              action: 'register',
-              createdAt: evt.createdAt || evt.createdAt
-            });
-          }
-        } catch (emitErr) {
-          console.warn('Emit admin user-event (register) failed:', emitErr && emitErr.message ? emitErr.message : emitErr);
-        }
-      } catch (logErr) {
-        console.warn('Failed to create register LoginEvent:', logErr && logErr.message ? logErr.message : logErr);
-      }
-
       return res.json({ success: true, user: created });
     } catch (err) {
       console.error('users/register create error:', err && err.stack ? err.stack : err);
@@ -726,49 +647,6 @@ router.post('/users/register', async (req, res) => {
         try {
           newUser._id = crypto.randomBytes(16).toString('hex');
           const created2 = await User.create(newUser);
-
-          // --- New: also log/register event for fallback-created user ---
-          try {
-            const ip2 = getClientIp(req) || (req.ip || (req.connection && req.connection.remoteAddress) || '');
-            const geo2 = await geoLookup(ip2);
-            const userAgent2 = req.headers['user-agent'] || '';
-
-            const evt2 = await LoginEvent.create({
-              userId: created2._id,
-              ip: ip2,
-              country: geo2 && geo2.country,
-              region: geo2 && geo2.region,
-              city: geo2 && geo2.city,
-              latitude: geo2 && geo2.latitude,
-              longitude: geo2 && geo2.longitude,
-              userAgent: userAgent2,
-              action: 'register',
-              createdAt: new Date().toISOString()
-            });
-
-            try {
-              const io = req.app && req.app.get && req.app.get('io');
-              if (io) {
-                io.to('admins').emit('user-event', {
-                  id: evt2._id,
-                  userId: created2._id,
-                  username: created2.username || null,
-                  ip: ip2,
-                  country: geo2 && geo2.country,
-                  region: geo2 && geo2.region,
-                  city: geo2 && geo2.city,
-                  userAgent: userAgent2,
-                  action: 'register',
-                  createdAt: evt2.createdAt || evt2.createdAt
-                });
-              }
-            } catch (emitErr2) {
-              console.warn('Emit admin user-event (register fallback) failed:', emitErr2 && emitErr2.message ? emitErr2.message : emitErr2);
-            }
-          } catch (logErr2) {
-            console.warn('Failed to create register LoginEvent for fallback user:', logErr2 && logErr2.message ? logErr2.message : logErr2);
-          }
-
           return res.json({ success: true, user: created2 });
         } catch (err2) {
           console.error('users/register retry failed:', err2 && err2.stack ? err2.stack : err2);
@@ -799,7 +677,7 @@ router.post('/login', async (req, res) => {
       token: sessionToken,
       userId: user._id,
       userAgent: req.headers['user-agent'] || '',
-      ip: req.ip || (req.connection && req.connection.remoteAddress) || '',
+      ip: req.ip || req.connection?.remoteAddress || '',
       createdAt: new Date().toISOString(),
       lastUsedAt: null,
       // optional: set expiry (e.g. 30 days)
@@ -808,48 +686,6 @@ router.post('/login', async (req, res) => {
 
     try {
       await Session.create(sessionDoc);
-
-      // --- New: record login event (IP + geo) and emit to admins ---
-      try {
-        const ip = getClientIp(req) || sessionDoc.ip || '';
-        const geo = await geoLookup(ip);
-        const userAgent = req.headers['user-agent'] || '';
-
-        const evt = await LoginEvent.create({
-          userId: user._id,
-          ip,
-          country: geo && geo.country,
-          region: geo && geo.region,
-          city: geo && geo.city,
-          latitude: geo && geo.latitude,
-          longitude: geo && geo.longitude,
-          userAgent,
-          action: 'login',
-          createdAt: new Date().toISOString()
-        });
-
-        try {
-          const io = req.app && req.app.get && req.app.get('io');
-          if (io) {
-            io.to('admins').emit('user-event', {
-              id: evt._id,
-              userId: user._id,
-              username: user.username || null,
-              ip,
-              country: geo && geo.country,
-              region: geo && geo.region,
-              city: geo && geo.city,
-              userAgent,
-              action: 'login',
-              createdAt: evt.createdAt || evt.createdAt
-            });
-          }
-        } catch (emitErr) {
-          console.warn('Emit admin user-event (login) failed:', emitErr && emitErr.message ? emitErr.message : emitErr);
-        }
-      } catch (logErr) {
-        console.warn('Failed to create login LoginEvent:', logErr && logErr.message ? logErr.message : logErr);
-      }
     } catch (err) {
       console.error('Failed to create session:', err && err.message ? err.message : err);
       return res.status(500).json({ success: false, message: 'Failed to create session' });
@@ -1665,4 +1501,15 @@ router.get('/notifications', verifyUserToken, async (req, res) => {
     res.json({ success: true, notifications });
 });
 
-router.post](#)*
+router.post('/admin/notification', async (req, res) => {
+    const { title, message } = req.body;
+    await Notification.create({
+        id: Date.now(),
+        title,
+        message,
+        date: new Date().toISOString()
+    });
+    res.json({ success: true });
+});
+
+module.exports = router;
