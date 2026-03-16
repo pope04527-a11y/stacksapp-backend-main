@@ -269,5 +269,38 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // Start
+const http = require('http');
+const { Server: IOServer } = require('socket.io');
+
+// Trust proxy (recommended when behind load balancer / CDN)
+app.set('trust proxy', true);
+
+const server = http.createServer(app);
+
+// Initialize Socket.IO and expose via app.set('io') so routes can emit events without circular requires
+const io = new IOServer(server, {
+  cors: {
+    origin: process.env.ADMIN_ORIGIN || true,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+app.set('io', io);
+
+// Basic Socket.IO handling: allow admin clients to join 'admins' room (use real auth in production)
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+
+  socket.on('join-admin', (token) => {
+    // In production verify token and admin privileges before joining.
+    console.log('Socket join-admin requested:', socket.id);
+    socket.join('admins');
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected:', socket.id);
+  });
+});
+
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => console.log(`✅ Backend running at http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`✅ Backend running at http://localhost:${PORT}`));
