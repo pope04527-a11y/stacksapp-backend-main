@@ -142,6 +142,52 @@
 
     .user-link { color:#1d4ed8; cursor:pointer; text-decoration:underline; }
 
+    /* Drawer-scoped modal styling: ensure modals stay inside the drawer */
+    .user-detail-panel .modal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.45);
+      z-index: 2000;
+    }
+    .user-detail-panel .modal .modal-content {
+      width: 520px;
+      max-width: calc(100% - 40px);
+      max-height: calc(100% - 80px);
+      overflow: auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+    @media (max-width:520px) {
+      .user-detail-panel .modal .modal-content { width: 94%; padding: 12px; }
+    }
+
+    /* Simple toast styling (re-used) */
+    .toast {
+      visibility: hidden;
+      min-width: 180px;
+      background-color: #1767c6;
+      color: #fff;
+      text-align: center;
+      border-radius: 7px;
+      padding: 10px;
+      position: fixed;
+      z-index: 9999;
+      left: 50%;
+      bottom: 36px;
+      font-size: 15px;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+    .toast.show {
+      visibility: visible;
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -270,167 +316,167 @@
       <!-- inline forms (hidden until needed) -->
       <div id="inlineForms" style="margin-top:8px;"></div>
     </div>
-  </div>
 
-  <!-- Combos/Product picker modal (re-used from combos page) -->
-  <div class="modal" id="comboModal">
-    <div class="modal-content" style="max-width:520px">
-      <span class="close" onclick="closeComboModal()">&times;</span>
-      <h2 id="comboModalTitle">Assign Combo</h2>
-      <form id="comboForm" autocomplete="off">
-        <input type="text" id="combo_modalUsername" placeholder="Username" required />
-        <input type="number" id="combo_modalTriggerTask" placeholder="Trigger Task Number" min="1" required style="margin-bottom:8px;" />
+    <!-- Combos/Product picker modal (scoped inside drawer) -->
+    <div class="modal" id="comboModal">
+      <div class="modal-content">
+        <span class="close" onclick="closeComboModal()">&times;</span>
+        <h2 id="comboModalTitle">Assign Combo</h2>
+        <form id="comboForm" autocomplete="off">
+          <input type="text" id="combo_modalUsername" placeholder="Username" required />
+          <input type="number" id="combo_modalTriggerTask" placeholder="Trigger Task Number" min="1" required style="margin-bottom:8px;" />
 
-        <label style="font-weight: 500; margin-top:4px; display:block;">Pick Products:</label>
-        <div class="filter-row">
-          <input type="number" id="combo_minPriceInput" placeholder="Min price" style="width:90px;" oninput="comboFetchCloudinaryProducts()" />
-          <input type="number" id="combo_maxPriceInput" placeholder="Max price" style="width:90px;" oninput="comboFetchCloudinaryProducts()" />
-        </div>
-        <input type="text" id="combo_productSearch" placeholder="Search products..." style="width:100%;margin-bottom:4px;" oninput="renderProductGrid()" />
-        <div class="product-grid" id="productGrid"></div>
+          <label style="font-weight: 500; margin-top:4px; display:block;">Pick Products:</label>
+          <div class="filter-row">
+            <input type="number" id="combo_minPriceInput" placeholder="Min price" style="width:90px;" oninput="comboFetchCloudinaryProducts()" />
+            <input type="number" id="combo_maxPriceInput" placeholder="Max price" style="width:90px;" oninput="comboFetchCloudinaryProducts()" />
+          </div>
+          <input type="text" id="combo_productSearch" placeholder="Search products..." style="width:100%;margin-bottom:4px;" oninput="renderProductGrid()" />
+          <div class="product-grid" id="productGrid"></div>
 
-        <label style="font-weight: 500; margin-top:8px; display:block;">Selected Products:</label>
-        <table class="selected-products-table">
-          <thead>
-            <tr>
-              <th>Image</th>
-              <th>Name</th>
-              <th>Price</th>
-              <th>Commission</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="selectedProductsTable"></tbody>
-        </table>
+          <label style="font-weight: 500; margin-top:8px; display:block;">Selected Products:</label>
+          <table class="selected-products-table">
+            <thead>
+              <tr>
+                <th>Image</th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Commission</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="selectedProductsTable"></tbody>
+          </table>
 
-        <button type="submit" class="add-btn">Save</button>
-      </form>
+          <button type="submit" class="add-btn">Save</button>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <!-- Add/Edit User Modal -->
-  <div class="modal" id="userModal">
-    <div class="modal-content">
-      <span class="close" onclick="closeUserModal()">&times;</span>
-      <h2 id="userModalTitle">Add User</h2>
-      <form id="userForm">
-        <!-- Basic -->
-        <div class="field-wrap">
-          <label class="field-label" for="modalUsername">Username</label>
-          <input type="text" id="modalUsername" placeholder="Username" required />
-        </div>
+    <!-- Add/Edit User Modal (scoped inside drawer) -->
+    <div class="modal" id="userModal">
+      <div class="modal-content">
+        <span class="close" onclick="closeUserModal()">&times;</span>
+        <h2 id="userModalTitle">Add User</h2>
+        <form id="userForm">
+          <!-- Basic -->
+          <div class="field-wrap">
+            <label class="field-label" for="modalUsername">Username</label>
+            <input type="text" id="modalUsername" placeholder="Username" required />
+          </div>
 
-        <div class="field-wrap">
-          <label class="field-label" for="modalPhone">Phone</label>
-          <input type="text" id="modalPhone" placeholder="Phone" required />
-        </div>
+          <div class="field-wrap">
+            <label class="field-label" for="modalPhone">Phone</label>
+            <input type="text" id="modalPhone" placeholder="Phone" required />
+          </div>
 
-        <!-- Passwords -->
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalLoginPassword">Login Password</label>
-            <input type="text" id="modalLoginPassword" placeholder="Login Password" />
+          <!-- Passwords -->
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalLoginPassword">Login Password</label>
+              <input type="text" id="modalLoginPassword" placeholder="Login Password" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalWithdrawPassword">Withdraw Password</label>
+              <input type="text" id="modalWithdrawPassword" placeholder="Withdraw Password" />
+            </div>
           </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalWithdrawPassword">Withdraw Password</label>
-            <input type="text" id="modalWithdrawPassword" placeholder="Withdraw Password" />
-          </div>
-        </div>
 
-        <!-- Profile -->
-        <div class="field-wrap">
-          <label class="field-label" for="modalGender">Gender</label>
-          <select id="modalGender" >
-            <option value="">Select gender</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
+          <!-- Profile -->
+          <div class="field-wrap">
+            <label class="field-label" for="modalGender">Gender</label>
+            <select id="modalGender" >
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
 
-        <!-- Financial / stats -->
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalBalance">Balance</label>
-            <input type="number" id="modalBalance" placeholder="Balance" min="0" step="0.01" value="0" />
+          <!-- Financial / stats -->
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalBalance">Balance</label>
+              <input type="number" id="modalBalance" placeholder="Balance" min="0" step="0.01" value="0" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalCommission">Commission</label>
+              <input type="number" id="modalCommission" placeholder="Commission" min="0" step="0.01" value="0" />
+            </div>
           </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalCommission">Commission</label>
-            <input type="number" id="modalCommission" placeholder="Commission" min="0" step="0.01" value="0" />
-          </div>
-        </div>
 
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalCommissionToday">Commission Today</label>
-            <input type="number" id="modalCommissionToday" placeholder="Commission Today" min="0" step="0.01" value="0" />
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalCommissionToday">Commission Today</label>
+              <input type="number" id="modalCommissionToday" placeholder="Commission Today" min="0" step="0.01" value="0" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalLastCommissionReset">Last Commission Reset</label>
+              <input type="date" id="modalLastCommissionReset" placeholder="Last Commission Reset" />
+            </div>
           </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalLastCommissionReset">Last Commission Reset</label>
-            <input type="date" id="modalLastCommissionReset" placeholder="Last Commission Reset" />
-          </div>
-        </div>
 
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalVip">VIP Level</label>
-            <input type="number" id="modalVip" placeholder="VIP Level" min="0" value="1" />
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalVip">VIP Level</label>
+              <input type="number" id="modalVip" placeholder="VIP Level" min="0" value="1" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalInviteCode">Invite Code</label>
+              <input type="text" id="modalInviteCode" placeholder="Invite Code" />
+            </div>
           </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalInviteCode">Invite Code</label>
-            <input type="text" id="modalInviteCode" placeholder="Invite Code" />
-          </div>
-        </div>
 
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalReferredBy">Referred By</label>
-            <input type="text" id="modalReferredBy" placeholder="Referred By" />
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalReferredBy">Referred By</label>
+              <input type="text" id="modalReferredBy" placeholder="Referred By" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalCurrentSet">Current Set</label>
+              <input type="number" id="modalCurrentSet" placeholder="Current Set" min="0" value="0" />
+            </div>
           </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalCurrentSet">Current Set</label>
-            <input type="number" id="modalCurrentSet" placeholder="Current Set" min="0" value="0" />
-          </div>
-        </div>
 
-        <div class="row">
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalCreatedAt">Created At (readonly)</label>
+              <input type="text" id="modalCreatedAt" placeholder="Created At (readonly)" readonly />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalTaskCountToday">Task Count Today</label>
+              <input type="number" id="modalTaskCountToday" placeholder="Task Count Today" min="0" value="0" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field-wrap">
+              <label class="field-label" for="modalTasksCompletedInSet">Tasks Completed In Set</label>
+              <input type="number" id="modalTasksCompletedInSet" placeholder="Tasks Completed In Set" min="0" value="0" />
+            </div>
+            <div class="field-wrap">
+              <label class="field-label" for="modalSetStartingBalance">Set Starting Balance</label>
+              <input type="number" id="modalSetStartingBalance" placeholder="Set Starting Balance" min="0" step="0.01" value="0" />
+            </div>
+          </div>
+
+          <!-- Exchange & wallet -->
           <div class="field-wrap">
-            <label class="field-label" for="modalCreatedAt">Created At (readonly)</label>
-            <input type="text" id="modalCreatedAt" placeholder="Created At (readonly)" readonly />
+            <label class="field-label" for="modalExchange">Exchange</label>
+            <input type="text" id="modalExchange" placeholder="Exchange" />
           </div>
           <div class="field-wrap">
-            <label class="field-label" for="modalTaskCountToday">Task Count Today</label>
-            <input type="number" id="modalTaskCountToday" placeholder="Task Count Today" min="0" value="0" />
+            <label class="field-label" for="modalWalletAddress">Wallet Address</label>
+            <input type="text" id="modalWalletAddress" placeholder="Wallet Address" />
           </div>
-        </div>
 
-        <div class="row">
-          <div class="field-wrap">
-            <label class="field-label" for="modalTasksCompletedInSet">Tasks Completed In Set</label>
-            <input type="number" id="modalTasksCompletedInSet" placeholder="Tasks Completed In Set" min="0" value="0" />
-          </div>
-          <div class="field-wrap">
-            <label class="field-label" for="modalSetStartingBalance">Set Starting Balance</label>
-            <input type="number" id="modalSetStartingBalance" placeholder="Set Starting Balance" min="0" step="0.01" value="0" />
-          </div>
-        </div>
+          <!-- Hidden token (if you ever want to update it) -->
+          <input type="hidden" id="modalToken" />
 
-        <!-- Exchange & wallet -->
-        <div class="field-wrap">
-          <label class="field-label" for="modalExchange">Exchange</label>
-          <input type="text" id="modalExchange" placeholder="Exchange" />
-        </div>
-        <div class="field-wrap">
-          <label class="field-label" for="modalWalletAddress">Wallet Address</label>
-          <input type="text" id="modalWalletAddress" placeholder="Wallet Address" />
-        </div>
-
-        <!-- Hidden token (if you ever want to update it) -->
-        <input type="hidden" id="modalToken" />
-
-        <!-- Save -->
-        <button type="submit" class="add-btn">Save</button>
-      </form>
+          <!-- Save -->
+          <button type="submit" class="add-btn">Save</button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -449,7 +495,6 @@
 
     async function fetchUsers() {
       try {
-        // Use the correct admin API endpoint (ensure it matches your backend!)
         const res = await fetch('/admin/users', {
           headers: { 'x-admin-token': localStorage.getItem('adminToken') }
         });
@@ -470,7 +515,6 @@
         const currentSet = (typeof user.currentSet === "number")
           ? `Set ${user.currentSet || 1}`
           : "—";
-        // Use escaped username for inline handlers
         const escUsername = escapeForInline(user.username || "");
         table.innerHTML += `
           <tr>
@@ -503,7 +547,6 @@
       });
       document.getElementById("bulkActions").style.display = selectedUsers.size > 0 ? "block" : "none";
 
-      // Update the Select All checkbox state based on whether all known users are selected
       const allUsernames = allUsers.map(u => u.username);
       const allSelected = allUsernames.length > 0 && allUsernames.every(u => selectedUsers.has(u));
       document.getElementById("selectAllUsers").checked = allSelected;
@@ -544,8 +587,6 @@
       if (master.checked) {
         allUsers.forEach((u) => selectedUsers.add(u.username));
       }
-      // Re-render (so checkboxes reflect selection state)
-      // If there's a search active, maintain the current filter view:
       const query = document.getElementById("searchInput").value.toLowerCase();
       const filtered = allUsers.filter(user =>
         user.username.toLowerCase().includes(query) ||
@@ -567,7 +608,6 @@
       editingOriginalUsername = null;
       document.getElementById("userModalTitle").textContent = "Add User";
       document.getElementById("userForm").reset();
-      // Set sensible defaults
       document.getElementById("modalVip").value = 1;
       document.getElementById("modalBalance").value = 0;
       document.getElementById("modalCommission").value = 0;
@@ -579,7 +619,9 @@
       document.getElementById("modalExchange").value = "";
       document.getElementById("modalWalletAddress").value = "";
       document.getElementById("modalCreatedAt").value = "";
-      document.getElementById("userModal").style.display = "block";
+      // Ensure drawer is visible so modal appears inside it
+      document.getElementById('userDetailPanel').classList.add('show');
+      document.getElementById('userModal').style.display = "flex";
     }
     function closeUserModal() {
       document.getElementById("userModal").style.display = "none";
@@ -607,7 +649,7 @@
       const inviteCode = document.getElementById("modalInviteCode").value.trim();
       const referredBy = document.getElementById("modalReferredBy").value.trim();
       const currentSet = readNumber("modalCurrentSet") ?? 0;
-      const createdAt = document.getElementById("modalCreatedAt").value || null; // read-only (if present)
+      const createdAt = document.getElementById("modalCreatedAt").value || null;
       const taskCountToday = readNumber("modalTaskCountToday") ?? 0;
       const tasksCompletedInSet = readNumber("modalTasksCompletedInSet") ?? 0;
       const setStartingBalance = readNumber("modalSetStartingBalance") ?? 0;
@@ -636,13 +678,11 @@
         exchange,
         walletAddress
       };
-      // remove undefined keys so backend doesn't get those when empty
       Object.keys(payload).forEach(k => {
         if (payload[k] === undefined || payload[k] === null) delete payload[k];
       });
 
       if (editingOriginalUsername !== null) {
-        // Update existing user (use original username in URL in case username changed)
         try {
           const res = await fetch(`/admin/users/${encodeURIComponent(editingOriginalUsername)}`, {
             method: 'PUT',
@@ -662,7 +702,6 @@
           showToast("Network/server error when updating user.");
         }
       } else {
-        // Add new user
         try {
           const res = await fetch('/admin/users', {
             method: 'POST',
@@ -686,14 +725,12 @@
           showToast("Network/server error when adding user.");
         }
       }
-      // reset editingOriginalUsername so subsequent adds are not treated as edits
       editingOriginalUsername = null;
       closeUserModal();
       fetchUsers();
     };
 
     function editUser(username) {
-      // Find the up-to-date user record from allUsers using the stable username
       const user = allUsers.find(u => u.username === username);
       if (!user) {
         showToast("User not found or data stale. Refreshing list...");
@@ -702,24 +739,15 @@
       }
       editingOriginalUsername = user.username;
       document.getElementById("userModalTitle").textContent = "Edit User";
-
-      // Basic
       document.getElementById("modalUsername").value = user.username || "";
       document.getElementById("modalPhone").value = user.phone || "";
-
-      // Passwords (do not prefill if not present but allow editing)
       document.getElementById("modalLoginPassword").value = user.loginPassword || "";
       document.getElementById("modalWithdrawPassword").value = user.withdrawPassword || "";
-
-      // Profile & meta
       document.getElementById("modalGender").value = user.gender || "";
       document.getElementById("modalVip").value = user.vipLevel != null ? user.vipLevel : 1;
-
-      // Financial / stats
       document.getElementById("modalBalance").value = user.balance != null ? user.balance : 0;
       document.getElementById("modalCommission").value = user.commission != null ? user.commission : 0;
       document.getElementById("modalCommissionToday").value = user.commissionToday != null ? user.commissionToday : 0;
-      // lastCommissionReset might be stored as ISO date string; input[type=date] expects yyyy-mm-dd
       if (user.lastCommissionReset) {
         const d = new Date(user.lastCommissionReset);
         if (!isNaN(d)) {
@@ -733,26 +761,19 @@
       } else {
         document.getElementById("modalLastCommissionReset").value = "";
       }
-
       document.getElementById("modalInviteCode").value = user.inviteCode || "";
       document.getElementById("modalReferredBy").value = user.referredBy || "";
       document.getElementById("modalCurrentSet").value = user.currentSet != null ? user.currentSet : 0;
-
-      // createdAt (read-only; show ISO string)
       document.getElementById("modalCreatedAt").value = user.createdAt || "";
-
       document.getElementById("modalTaskCountToday").value = user.taskCountToday != null ? user.taskCountToday : 0;
       document.getElementById("modalTasksCompletedInSet").value = user.tasksCompletedInSet != null ? user.tasksCompletedInSet : 0;
       document.getElementById("modalSetStartingBalance").value = user.setStartingBalance != null ? user.setStartingBalance : 0;
-
-      // Exchange & wallet
       document.getElementById("modalExchange").value = user.exchange || "";
       document.getElementById("modalWalletAddress").value = user.walletAddress || "";
-
-      // Token (hidden)
       document.getElementById("modalToken").value = user.token || "";
-
-      document.getElementById("userModal").style.display = "block";
+      // Ensure drawer shown
+      document.getElementById('userDetailPanel').classList.add('show');
+      document.getElementById("userModal").style.display = "flex";
     }
 
     async function suspendUser(username) {
@@ -785,7 +806,6 @@
           showToast("Failed to delete user: " + (data.message || res.statusText));
           return;
         }
-        // Remove from selectedUsers if present
         selectedUsers.delete(username);
         showToast("User deleted.");
         fetchUsers();
@@ -885,13 +905,7 @@
       window.location.href = "/admin-panel/login.html";
     }
 
-    window.onclick = function(event) {
-      if (event.target.classList.contains('modal')) {
-        event.target.style.display = "none";
-      }
-    }
-
-    // -- New: User detail panel logic and collapsible sections --
+    // -- User detail panel logic and collapsible sections --
 
     async function fetchUser(username) {
       const res = await fetch(`/admin/users/${encodeURIComponent(username)}`, {
@@ -908,7 +922,6 @@
         document.getElementById('userDetailPanel').setAttribute('aria-hidden', 'false');
         const panel = document.getElementById('userDetailPanel');
         panel.classList.add('show');
-        // Collapse all sections initially
         collapseAllSections();
         await loadUserDetail(username);
       } catch (err) {
@@ -921,15 +934,17 @@
       const panel = document.getElementById('userDetailPanel');
       panel.classList.remove('show');
       panel.setAttribute('aria-hidden', 'true');
-      // clear inline forms
       document.getElementById('inlineForms').innerHTML = '';
+      // hide modals if open
+      document.getElementById('comboModal').style.display = 'none';
+      document.getElementById('userModal').style.display = 'none';
     }
 
     function collapseAllSections() {
       ['combosContent','depositsContent','withdrawalsContent'].forEach(id => {
-        document.getElementById(id).classList.remove('show');
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('show');
       });
-      // update summaries text
       document.getElementById('combosSummary').textContent = '(click to view)';
       document.getElementById('depositsSummary').textContent = '(click to view)';
       document.getElementById('withdrawalsSummary').textContent = '(click to view)';
@@ -941,11 +956,9 @@
       collapseAllSections();
       if (!isShown) {
         content.classList.add('show');
-        // load data for that section on demand
         if (name === 'combos') await loadCombosForDetail(window._currentDetailUser);
         if (name === 'deposits') await loadDepositsForDetail(window._currentDetailUser);
         if (name === 'withdrawals') await loadWithdrawalsForDetail(window._currentDetailUser);
-        // update summary text
         document.getElementById(name + 'Summary').textContent = '(expanded)';
       }
     }
@@ -965,7 +978,6 @@
 
         window._currentDetailUser = username;
 
-        // update small summaries (counts) asynchronously
         setTimeout(async () => {
           const combosCount = await fetchUserCombosCount(username);
           document.getElementById('combosSummary').textContent = combosCount ? `(${combosCount} combo${combosCount>1?'s':''})` : '(no combos)';
@@ -975,7 +987,6 @@
           document.getElementById('withdrawalsSummary').textContent = wdCount ? `(${wdCount} withdrawal${wdCount>1?'s':''})` : '(no withdrawals)';
         }, 0);
 
-        // clear inline forms area
         document.getElementById('inlineForms').innerHTML = '';
       } catch (err) {
         console.error('loadUserDetail error', err);
@@ -983,7 +994,6 @@
       }
     }
 
-    // counts helpers
     async function fetchUserCombosCount(username) {
       try {
         const res = await fetch('/admin/combos', { headers: { 'x-admin-token': localStorage.getItem('adminToken') } });
@@ -1012,7 +1022,7 @@
       } catch { return 0; }
     }
 
-    // load combos list for detail view
+    // load combos list for detail view (renders with product tiles like combos page)
     async function loadCombosForDetail(username) {
       try {
         const combosResp = await fetch('/admin/combos', { headers: { "x-admin-token": localStorage.getItem('adminToken') } });
@@ -1023,8 +1033,8 @@
         if (!userCombos.length) combosListEl.innerHTML = '<div class="muted">No combos assigned</div>';
         else {
           combosListEl.innerHTML = '<ul class="list">' + userCombos.map(c => {
-            const productsHtml = (Array.isArray(c.products) ? c.products : []).map(p => `<div style="display:flex;align-items:center;gap:8px;"><img src="${p.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;"> <div><strong>${p.name}</strong><div class="muted">£${p.price} | commission £${p.commission}</div></div></div>`).join('');
-            return `<li style="display:block;"><div style="display:flex;justify-content:space-between;"><div><strong>Trigger:</strong> ${c.triggerTaskNumber || '-'}<div class="muted" style="margin-top:6px;">${productsHtml}</div></div><div><button class="action-btn" onclick="deleteComboFromDetail('${escapeForInline(String(c._id||""))}');">Delete</button></div></div></li>`;
+            const productsHtml = (Array.isArray(c.products) ? c.products : []).map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><img src="${p.image}" style="width:34px;height:34px;border-radius:4px;object-fit:cover;"> <div><strong>${escapeHtml(p.name)}</strong><div class="muted">£${p.price} | commission £${p.commission}</div></div></div>`).join('');
+            return `<li style="display:block;padding-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div><strong>Trigger:</strong> ${c.triggerTaskNumber || '-'}<div class="muted" style="margin-top:8px;">${productsHtml}</div></div><div><button class="action-btn" onclick="deleteComboFromDetail('${escapeForInline(String(c._id||""))}');">Delete</button></div></div></li>`;
           }).join('') + '</ul>';
         }
       } catch (err) {
@@ -1068,6 +1078,8 @@
         document.getElementById('detailDepositsList').innerHTML = '<li class="muted">Failed to load deposits</li>';
       }
     }
+
+    // withdrawals list with inline approve/reject/pending actions
     async function loadWithdrawalsForDetail(username) {
       try {
         const txResp = await fetch('/admin/transactions', { headers: { "x-admin-token": localStorage.getItem('adminToken') } });
@@ -1077,17 +1089,72 @@
           withdrawals = (txJson.withdrawals || []).filter(t => t.user === username || t.username === username);
         }
         const wdList = document.getElementById('detailWithdrawalsList');
-        wdList.innerHTML = withdrawals.length ? withdrawals.map(d => `<li><div><strong>$${Number(d.amount||0).toFixed(2)}</strong> — ${d.status||''} <div class="muted">${d.createdAt||''}</div></div><div class="compact">${d.note || ''}</div></li>`).join('') : '<li class="muted">No withdrawals</li>';
+        if (!withdrawals.length) {
+          wdList.innerHTML = '<li class="muted">No withdrawals</li>';
+          return;
+        }
+        wdList.innerHTML = withdrawals.map(w => {
+          const id = w._id || w.id || w.transactionId || '';
+          const created = w.createdAt || w.requestedAt || '';
+          return `<li style="display:block;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <div><strong>$${Number(w.amount||0).toFixed(2)}</strong> — <span class="muted">${w.status||'Pending'}</span></div>
+                <div class="muted">${created}</div>
+                <div class="muted">${w.method || ''} ${w.note ? '— ' + escapeHtml(w.note) : ''}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <button class="action-btn" onclick="setWithdrawalStatus('${escapeForInline(String(id))}','Approved')">Approve</button>
+                <button class="action-btn" onclick="setWithdrawalStatus('${escapeForInline(String(id))}','Rejected')">Reject</button>
+                <button class="action-btn" onclick="setWithdrawalStatus('${escapeForInline(String(id))}','Pending')">Pend</button>
+              </div>
+            </div>
+          </li>`;
+        }).join('');
       } catch (e) {
         console.error('loadWithdrawalsForDetail', e);
         document.getElementById('detailWithdrawalsList').innerHTML = '<li class="muted">Failed to load withdrawals</li>';
       }
     }
 
-    // --- Inline actions (assign combo/add balance/update VIP/reset tasks/etc) ---
+    // set withdrawal status: uses existing endpoints for approve/reject and PUT for pending
+    async function setWithdrawalStatus(id, status) {
+      if (!id) { showToast('Withdrawal id missing'); return; }
+      try {
+        if (status === 'Approved') {
+          const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/approve`, { method: 'PATCH', headers: { "x-admin-token": localStorage.getItem('adminToken') } });
+          if (!res.ok) { showToast('Approve failed'); return; }
+          showToast('Withdrawal approved');
+        } else if (status === 'Rejected') {
+          const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}/reject`, { method: 'PATCH', headers: { "x-admin-token": localStorage.getItem('adminToken') } });
+          if (!res.ok) { showToast('Reject failed'); return; }
+          showToast('Withdrawal rejected');
+        } else {
+          // set to Pending via PUT update
+          const res = await fetch(`/admin/withdrawals/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { "Content-Type": "application/json", "x-admin-token": localStorage.getItem('adminToken') },
+            body: JSON.stringify({ status: 'Pending' })
+          });
+          if (!res.ok) { showToast('Failed to set pending'); return; }
+          showToast('Withdrawal set to pending');
+        }
+        // refresh list and panel summaries
+        if (document.getElementById('withdrawalsContent').classList.contains('show')) {
+          await loadWithdrawalsForDetail(window._currentDetailUser);
+        }
+        // update summary counts
+        const wdCount = await fetchUserWithdrawalsCount(window._currentDetailUser);
+        document.getElementById('withdrawalsSummary').textContent = wdCount ? `(${wdCount} withdrawal${wdCount>1?'s':''})` : '(no withdrawals)';
+      } catch (e) {
+        console.error('setWithdrawalStatus', e);
+        showToast('Network error changing withdrawal status');
+      }
+    }
+
+    // Inline: Assign combo/add balance/update VIP/reset tasks/etc (modals are scoped to drawer)
 
     function openAssignComboForDetail() {
-      // set modal username to current user
       const username = window._currentDetailUser;
       if (!username) { showToast('No user selected'); return; }
       selectedProducts = [];
@@ -1099,7 +1166,7 @@
       document.getElementById('combo_maxPriceInput').value = '';
       comboFetchCloudinaryProducts();
       renderSelectedProductsTable();
-      document.getElementById('comboModal').style.display = 'block';
+      document.getElementById('comboModal').style.display = 'flex';
     }
 
     async function submitAssignComboFromModal(e) {
@@ -1125,7 +1192,6 @@
         }
         showToast('Combo assigned');
         document.getElementById('comboModal').style.display = 'none';
-        // refresh combos summary & expanded list if open
         document.getElementById('combosSummary').textContent = '(updated)';
         if (document.getElementById('combosContent').classList.contains('show')) {
           await loadCombosForDetail(window._currentDetailUser);
@@ -1306,6 +1372,7 @@
 
     function renderProductGrid() {
       const grid = document.getElementById("productGrid");
+      if (!grid) return;
       const productSearchTerm = document.getElementById("combo_productSearch").value.trim().toLowerCase();
       grid.innerHTML = "";
       let filtered = productsList.filter(p =>
@@ -1314,7 +1381,6 @@
       );
       filtered.forEach((prod) => {
         const isSelected = selectedProducts.some(sp => sp.image === prod.image);
-        // escape single quotes by using data-* attribute and binding onclick to wrapper
         const wrapper = document.createElement('div');
         wrapper.className = 'product-tile' + (isSelected ? ' selected' : '');
         wrapper.onclick = () => toggleProduct(prod.image);
@@ -1342,6 +1408,7 @@
 
     function renderSelectedProductsTable() {
       const table = document.getElementById("selectedProductsTable");
+      if (!table) return;
       table.innerHTML = "";
       selectedProducts.forEach((prod, idx) => {
         table.innerHTML += `
@@ -1378,11 +1445,19 @@
 
     document.getElementById('comboForm').addEventListener('submit', submitAssignComboFromModal);
 
-    // helper: count combos/deposits/withdrawals when panel opened (already used above)
+    // close drawer-scoped modal when clicking overlay inside drawer
+    document.querySelectorAll('.user-detail-panel .modal').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+    });
 
     // initial load
     fetchUsers();
 
+    // keep dark mode sync
   </script>
 
 <script>
