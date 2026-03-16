@@ -28,15 +28,16 @@
       background: inherit;
       overflow: hidden;
     }
+    /* Sidebar width increased 3x (from 60px to 180px) as requested */
     .sidebar {
-      width: 60px;
+      width: 180px;
       background: #1749a4;
       color: #fff;
       display: flex;
       flex-direction: column;
       align-items: center;
       z-index: 100;
-      min-width: 60px;
+      min-width: 180px;
       transition: width 0.2s;
       height: 100vh;
     }
@@ -65,6 +66,8 @@
       scrollbar-width: thin;
       scrollbar-color: #2367bb #1749a4;
       margin-bottom: 10px;
+      padding-left: 6px; /* slight padding so content isn't flush */
+      box-sizing: border-box;
     }
     .sidebar-nav::-webkit-scrollbar {
       width: 6px;
@@ -74,17 +77,19 @@
       background: #2367bb;
       border-radius: 4px;
     }
+    /* Links keep their vertical layout but now have space */
     .sidebar-nav a {
       display: flex;
       flex-direction: column;
       align-items: center;
       color: #fff;
-      padding: 16px 0 8px 0;
+      padding: 18px 0 10px 0;
       text-decoration: none;
       width: 100%;
       font-size: 18px;
       transition: background 0.18s;
       border-left: 4px solid transparent;
+      box-sizing: border-box;
     }
     .sidebar-nav a.active,
     .sidebar-nav a:focus,
@@ -206,7 +211,8 @@
     .appbar-actions {
       display: flex;
       align-items: center;
-      gap: 15px;
+      gap: 12px;
+      position: relative; /* for autocomplete positioning */
     }
     .appbar-welcome {
       font-size: 14px;
@@ -335,9 +341,10 @@
         overflow: hidden;
         transition: width 0.18s;
       }
+      /* When shown on small screens, show full (3x) width as requested */
       .sidebar.show {
-        width: 60px;
-        min-width: 60px;
+        width: 180px;
+        min-width: 180px;
       }
       .appbar {
         padding-left: 10px;
@@ -346,9 +353,14 @@
         padding: 12px 3px 0 3px;
       }
     }
+    /* Ensure .sidebar.show on desktop uses the larger width as well */
+    .sidebar.show {
+      width: 180px;
+      min-width: 180px;
+    }
     body.dark, html.dark {
       background: #161d2a !important;
-      color: #f5f5f5 !important;
+      color: #f5f6f5 !important;
     }
     body.dark .appbar, html.dark .appbar {
       background: #1a2235 !important;
@@ -431,6 +443,45 @@
     .add-user-actions { display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
     .btn-primary { background: #1767c6; color: #fff; border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
     .btn-ghost { background: transparent; border: 1px solid #ddd; padding: 8px 12px; border-radius:6px; cursor:pointer; }
+
+    /* Appbar user search autocomplete */
+    .appbar-search {
+      position: relative;
+      display: inline-block;
+    }
+    .appbar-search input[type="text"] {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #e6e6e6;
+      width: 220px;
+      box-sizing: border-box;
+    }
+    .appbar-autocomplete {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: 100%;
+      background: #fff;
+      border: 1px solid #e6e6e6;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+      max-height: 260px;
+      overflow-y: auto;
+      z-index: 1200;
+      border-radius: 8px;
+    }
+    .appbar-autocomplete .item {
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: #111827;
+    }
+    .appbar-autocomplete .item:hover {
+      background: #f3f4f6;
+    }
     @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -496,10 +547,12 @@
           <i class="fa fa-chart-bar"></i> Dashboard
         </div>
         <div class="appbar-actions">
-          <input id="appbarSearch" placeholder="Search user..." style="padding:6px 10px;border-radius:8px;border:1px solid #e6e6e6;width:220px;" onkeydown="if(event.key==='Enter'){searchAndOpenUser();}" />
-          <button onclick="searchAndOpenUser()" title="Search user" style="background:#0ea5a0;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;">
-            <i class="fa fa-search"></i>
-          </button>
+          <!-- Appbar user search (autocomplete) -->
+          <div class="appbar-search" id="appbarSearchWrap">
+            <input id="appbarUserSearch" type="text" placeholder="Search user..." oninput="onAppbarUserInput()" onkeydown="onAppbarUserKeyDown(event)" />
+            <div id="appbarAutocomplete" class="appbar-autocomplete" style="display:none;"></div>
+          </div>
+
           <span class="appbar-welcome">Welcome, Admin</span>
 
           <!-- ADD USER BUTTON (non-intrusive) -->
@@ -645,6 +698,8 @@
       syncIframeDarkMode();
       showDashboardOverview();
       renderCharts();
+      // preload users for appbar search autocomplete
+      fetchAllUsersForAppbar();
     });
     document.body.addEventListener('classChange', syncIframeDarkMode);
     document.getElementById('mainFrame').addEventListener('load', syncIframeDarkMode);
@@ -665,17 +720,6 @@
         }
       });
     });
-
-    // New: appbar search to open user in users.html inside iframe
-    function searchAndOpenUser() {
-      const q = document.getElementById('appbarSearch').value.trim();
-      if (!q) {
-        showToast('Enter username to search');
-        return;
-      }
-      // open users page in iframe and pass username via hash so users.html will open the drawer
-      showIframePage('users.html#user=' + encodeURIComponent(q));
-    }
 
     // Real-time dashboard stats: fetch from backend
     async function updateDashboardStats() {
@@ -859,6 +903,7 @@
       }
 
       async function createMinimalUser(token, payload) {
+        // Defensive: never send a client-supplied _id
         if (payload && (payload._id || payload.id)) { delete payload._id; delete payload.id; }
         console.debug('[admin] createMinimalUser payload:', payload);
         const res = await fetch('/admin/users', {
@@ -912,6 +957,7 @@
             return;
           }
 
+          // create minimal user (do not include _id)
           const createPayload = { username, phone, vipLevel: 1, balance: 0 };
           const createResp = await createMinimalUser(token, createPayload);
 
@@ -954,6 +1000,98 @@
       window.addEventListener('click', (evt) => { if (evt.target === modal) hideModal(); });
     })();
     /* ===== end Add User modal wiring ===== */
+
+    //
+    // Appbar user search: fetch users once and show autocomplete; selecting opens users.html#user=<username>
+    //
+    let _appbarUsersCache = [];
+
+    async function fetchAllUsersForAppbar() {
+      try {
+        const res = await fetch('/admin/users', {
+          headers: { 'x-admin-token': localStorage.getItem('adminToken') }
+        });
+        if (res.ok) {
+          _appbarUsersCache = await res.json();
+        } else {
+          _appbarUsersCache = [];
+        }
+      } catch (e) {
+        _appbarUsersCache = [];
+      }
+    }
+
+    function onAppbarUserInput() {
+      const q = document.getElementById('appbarUserSearch').value.trim().toLowerCase();
+      const list = document.getElementById('appbarAutocomplete');
+      if (!q) {
+        list.style.display = 'none';
+        return;
+      }
+      const matches = _appbarUsersCache.filter(u => {
+        if (!u || !u.username) return false;
+        return u.username.toLowerCase().includes(q) || (u.phone && String(u.phone).includes(q));
+      }).slice(0, 30);
+      renderAppbarAutocomplete(matches);
+    }
+
+    function renderAppbarAutocomplete(matches) {
+      const list = document.getElementById('appbarAutocomplete');
+      list.innerHTML = '';
+      if (!matches.length) {
+        list.style.display = 'none';
+        return;
+      }
+      matches.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        const left = document.createElement('div');
+        left.textContent = u.username;
+        const right = document.createElement('div');
+        right.style.opacity = 0.8;
+        right.textContent = `$${Number(u.balance||0).toFixed(2)}`;
+        div.appendChild(left);
+        div.appendChild(right);
+        div.onclick = () => selectUserFromAppbar(u.username);
+        list.appendChild(div);
+      });
+      list.style.display = 'block';
+    }
+
+    function onAppbarUserKeyDown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const q = document.getElementById('appbarUserSearch').value.trim();
+        if (!q) return;
+        // If exact match exists, open that user; otherwise open users page with hash to search there.
+        const exact = _appbarUsersCache.find(u => u.username === q);
+        if (exact) {
+          selectUserFromAppbar(exact.username);
+          return;
+        }
+        // fallback: open users page with hash so users.html can read hash and open drawer
+        showIframePage('users.html#user=' + encodeURIComponent(q));
+        document.getElementById('appbarAutocomplete').style.display = 'none';
+      } else if (e.key === 'Escape') {
+        document.getElementById('appbarAutocomplete').style.display = 'none';
+      }
+    }
+
+    function selectUserFromAppbar(username) {
+      if (!username) return;
+      // open users page in iframe with hash so users.html opens that user in drawer
+      showIframePage('users.html#user=' + encodeURIComponent(username));
+      document.getElementById('appbarAutocomplete').style.display = 'none';
+      document.getElementById('appbarUserSearch').value = '';
+    }
+
+    // hide autocomplete when clicking outside
+    document.addEventListener('click', (evt) => {
+      const wrap = document.getElementById('appbarSearchWrap');
+      if (!wrap.contains(evt.target)) {
+        document.getElementById('appbarAutocomplete').style.display = 'none';
+      }
+    });
 
   </script>
 </body>
