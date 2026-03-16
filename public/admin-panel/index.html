@@ -28,15 +28,16 @@
       background: inherit;
       overflow: hidden;
     }
+    /* Sidebar width increased 3x (from 60px to 180px) as requested */
     .sidebar {
-      width: 60px;
+      width: 180px;
       background: #1749a4;
       color: #fff;
       display: flex;
       flex-direction: column;
       align-items: center;
       z-index: 100;
-      min-width: 60px;
+      min-width: 180px;
       transition: width 0.2s;
       height: 100vh;
     }
@@ -65,6 +66,8 @@
       scrollbar-width: thin;
       scrollbar-color: #2367bb #1749a4;
       margin-bottom: 10px;
+      padding-left: 6px; /* slight padding so content isn't flush */
+      box-sizing: border-box;
     }
     .sidebar-nav::-webkit-scrollbar {
       width: 6px;
@@ -74,17 +77,19 @@
       background: #2367bb;
       border-radius: 4px;
     }
+    /* Links keep their vertical layout but now have space */
     .sidebar-nav a {
       display: flex;
       flex-direction: column;
       align-items: center;
       color: #fff;
-      padding: 16px 0 8px 0;
+      padding: 18px 0 10px 0;
       text-decoration: none;
       width: 100%;
       font-size: 18px;
       transition: background 0.18s;
       border-left: 4px solid transparent;
+      box-sizing: border-box;
     }
     .sidebar-nav a.active,
     .sidebar-nav a:focus,
@@ -335,9 +340,10 @@
         overflow: hidden;
         transition: width 0.18s;
       }
+      /* When shown on small screens, show full (3x) width as requested */
       .sidebar.show {
-        width: 60px;
-        min-width: 60px;
+        width: 180px;
+        min-width: 180px;
       }
       .appbar {
         padding-left: 10px;
@@ -345,6 +351,11 @@
       .main-dashboard-content {
         padding: 12px 3px 0 3px;
       }
+    }
+    /* Ensure .sidebar.show on desktop uses the larger width as well */
+    .sidebar.show {
+      width: 180px;
+      min-width: 180px;
     }
     body.dark, html.dark {
       background: #161d2a !important;
