@@ -92,10 +92,10 @@ try {
 // -----------------------------
 // Replace the DB name at the end of the URI if you want a different default database.
 // WARNING: credentials are embedded in this file as requested.
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://Sequence:Mark075555@opts.ix4lknk.mongodb.net/mydb?retryWrites=true&w=majority';
+const MONGODB_URI = 'mongodb+srv://Sequence:Mark075555@opts.ix4lknk.mongodb.net/mydb?retryWrites=true&w=majority';
 
 if (!MONGODB_URI) {
-  console.error('❌ MONGODB_URI is not set. Please update the connection string in this file or set the environment variable.');
+  console.error('❌ MONGODB_URI is not set. Please update the connection string in this file.');
   process.exit(1);
 }
 
@@ -269,58 +269,5 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // Start
-const http = require('http');
-
-let IOServer = null;
-let io = null;
-// require socket.io safely — if not installed, we still start server and expose io=null
-try {
-  // prefer CommonJS require
-  const socketIoPkg = require('socket.io');
-  IOServer = socketIoPkg.Server || socketIoPkg;
-} catch (err) {
-  console.warn('socket.io not available. Admin socket notifications will be disabled. Install socket.io to enable them.', err && err.message ? err.message : err);
-}
-
-const server = http.createServer(app);
-
-// Trust proxy (recommended when behind load balancer / CDN)
-app.set('trust proxy', true);
-
-// Initialize Socket.IO only if package present
-if (IOServer) {
-  try {
-    io = new IOServer(server, {
-      cors: {
-        origin: process.env.ADMIN_ORIGIN || true,
-        methods: ["GET", "POST"],
-        credentials: true
-      }
-    });
-    app.set('io', io);
-
-    // Basic Socket.IO handling: allow admin clients to join 'admins' room (use real auth in production)
-    io.on('connection', (socket) => {
-      console.log('Socket connected:', socket.id);
-
-      socket.on('join-admin', (token) => {
-        // In production verify token and admin privileges before joining.
-        console.log('Socket join-admin requested:', socket.id);
-        socket.join('admins');
-      });
-
-      socket.on('disconnect', () => {
-        console.log('Socket disconnected:', socket.id);
-      });
-    });
-  } catch (err) {
-    console.warn('Failed to initialize Socket.IO — continuing without realtime notifications', err && err.message ? err.message : err);
-    app.set('io', null);
-  }
-} else {
-  // ensure app has 'io' defined (null) so route code does not throw
-  app.set('io', null);
-}
-
 const PORT = process.env.PORT || 3002;
-server.listen(PORT, () => console.log(`✅ Backend running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`✅ Backend running at http://localhost:${PORT}`));
