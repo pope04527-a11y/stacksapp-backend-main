@@ -27,11 +27,42 @@ app.use(cors({ origin: true, credentials: true }));
 // parse cookies so handlers/middleware can read httpOnly cookie
 app.use(cookieParser());
 
+// -----------------------------
+// Health token (random if not provided)
+// -----------------------------
+// Add a random token at startup if HEALTH_TOKEN not set in environment.
+// This token can be used for uptime monitors like UptimeRobot: 
+// e.g. https://your-app/health?token=<token>  or Authorization: Bearer <token>
+const HEALTH_TOKEN = process.env.HEALTH_TOKEN || crypto.randomBytes(24).toString('hex');
+// expose on process.env for other modules that might want to read it
+process.env.HEALTH_TOKEN = HEALTH_TOKEN;
+console.log('🔒 Health token (keep secret):', HEALTH_TOKEN);
+
 // Health endpoint fallback
 try {
   app.get('/health', require('./src/health'));
 } catch (e) {
-  app.get('/health', (req, res) => res.json({ ok: true }));
+  // Fallback health endpoint that validates the random token above (query or bearer)
+  app.get('/health', (req, res) => {
+    try {
+      const q = (req.query && req.query.token) ? String(req.query.token) : '';
+      const authHeader = req.get('authorization') || '';
+      const auth = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+      // If a token is present (always true here), require it to match.
+      if (HEALTH_TOKEN && HEALTH_TOKEN.length > 0) {
+        if (q !== HEALTH_TOKEN && auth !== HEALTH_TOKEN) {
+          return res.status(401).json({ ok: false, message: 'unauthorized' });
+        }
+      }
+
+      // Lightweight healthy response
+      return res.json({ ok: true, time: new Date().toISOString() });
+    } catch (err) {
+      // Resist throwing on health checks - return 200 with info if possible
+      return res.json({ ok: true, time: new Date().toISOString(), note: 'health endpoint fallback error' });
+    }
+  });
 }
 
 // Serve static files
