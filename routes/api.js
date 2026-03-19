@@ -862,47 +862,43 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
     let records = [];
     tasks.forEach(t => {
         if (t.isCombo && Array.isArray(t.products)) {
-            if (t.status === 'Pending' || t.status === 'pending') {
-                if (t.products.length === 2) {
+            // Task-level status Pending -> expose each product as its own record
+            if (String(t.status).toLowerCase() === 'pending') {
+                // map each product and preserve its frozen flag if present
+                t.products.forEach((prod, idx) => {
+                    const isFrozen = !!prod.frozen;
                     records.push({
-                        ...t.toObject(),
-                        comboIndex: 0,
-                        canSubmit: false,
+                        ...t.toObject ? t.toObject() : { ...t },
+                        comboIndex: idx,
+                        // the UI expects status; keep 'Pending' for display but clients should use product.frozen
                         status: 'Pending',
-                        product: t.products[0]
+                        canSubmit: !isFrozen, // only unfrozen product is allowed to show submit
+                        product: {
+                            ...prod,
+                            frozen: isFrozen,
+                            // Backwards compatible alias
+                            isFrozen
+                        }
                     });
-                    records.push({
-                        ...t.toObject(),
-                        comboIndex: 1,
-                        canSubmit: true,
-                        status: 'Pending',
-                        product: t.products[1]
-                    });
-                } else {
-                    t.products.forEach((prod, idx) => {
-                        records.push({
-                            ...t.toObject(),
-                            comboIndex: idx,
-                            canSubmit: idx === t.products.length - 1,
-                            status: 'Pending',
-                            product: prod
-                        });
-                    });
-                }
+                });
             } else {
+                // Completed combo -> show all products as Completed
                 t.products.forEach((prod, idx) => {
                     records.push({
-                        ...t.toObject(),
+                        ...t.toObject ? t.toObject() : { ...t },
                         comboIndex: idx,
                         canSubmit: false,
                         status: 'Completed',
-                        product: prod
+                        product: {
+                            ...prod,
+                            frozen: false
+                        }
                     });
                 });
             }
         } else {
             records.push({
-                ...t.toObject(),
+                ...t.toObject ? t.toObject() : { ...t },
                 canSubmit: true
             });
         }
@@ -1012,7 +1008,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
             Number(combo.triggerTaskNumber) === tasksCompleted && combo.username === user.username
         );
 
-        if (comboToTrigger && comboToTrigger.products && comboToTrigger.products.length === 2) {
+        if (comboToTrigger && comboToTrigger.products && comboToTrigger.products.length >= 2) {
             const comboTotal = comboToTrigger.products.reduce((sum, prod) => sum + Number(prod.price || 0), 0);
 
             if (comboTotal < minAllowedPrice) {
@@ -1027,18 +1023,28 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
             const taskCode = crypto.randomBytes(10).toString('hex');
             const now = new Date().toISOString();
 
+            // Create products array: mark every product status='Pending' and set frozen=true for all except the newest (last index)
+            const productsForTask = comboToTrigger.products.map((prod, idx, arr) => {
+              const finalImage =
+                prod.image && typeof prod.image === 'string' && prod.image.trim() !== '' && prod.image !== 'null'
+                  ? prod.image
+                  : chosenProduct.image;
+              return {
+                ...prod,
+                image: finalImage,
+                status: 'Pending',
+                submitted: false,
+                createdAt: now,
+                // ensure commission exists if source combo doesn't have it
+                commission: typeof prod.commission === 'number' ? prod.commission : Math.floor((Number(prod.price || 0) * (vipInfo.commissionRate || 0)) * 100) / 100,
+                // frozen = true for all except the newest (last) product
+                frozen: idx !== (arr.length - 1)
+              };
+            });
+
             const comboTask = {
                 username: user.username,
-                products: comboToTrigger.products.map(prod => ({
-                    ...prod,
-                    image: prod.image && typeof prod.image === 'string' && prod.image.trim() !== '' && prod.image !== 'null'
-                        ? prod.image
-                        : chosenProduct.image,
-                    status: 'Pending',
-                    submitted: false,
-                    createdAt: now,
-                    code: crypto.randomBytes(6).toString('hex')
-                })),
+                products: productsForTask,
                 status: 'Pending',
                 startedAt: now,
                 taskCode,
@@ -1055,7 +1061,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 success: true,
                 task: comboTask,
                 isCombo: true,
-                comboMustSubmitAllAtOnce: true,
+                comboMustSubmitAllAtOnce: false, // prefer per-product submit by default
                 currentBalance: updatedUser.balance,
                 isNegativeBalance: isNegative
             });
@@ -1109,7 +1115,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 // - Build response object locally to avoid an extra DB read
 // Middleware checkPlatformStatus applied here to block when platformClosed.
 router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, res) => {
-    const { taskCode } = req.body;
+    const { taskCode, comboIndex, submitAll } = req.body;
     const user = req.user;
 
     try {
@@ -1119,73 +1125,191 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
 
       // Combo tasks
       if (task.isCombo && Array.isArray(task.products)) {
+        // If submitAll is set (backwards-compatible), preserve old behaviour (mark all completed)
+        if (submitAll) {
+          if (user.balance < 0) {
+            return res.json({ success: false, mustDeposit: true, message: "Insufficient balance. Please deposit to clear negative balance before submitting combo products." });
+          }
+
+          const now = new Date().toISOString();
+          const updatedProducts = task.products.map(prod => ({ ...prod, status: 'Completed', submitted: true, completedAt: now, frozen: false }));
+
+          const totalRefund = updatedProducts.reduce((sum, prod) => sum + Number(prod.price || 0), 0);
+          const totalCommission = updatedProducts.reduce((sum, prod) => sum + Number(prod.commission || 0), 0);
+
+          // Parallel updates: user balance and task status
+          const userUpdatePromise = User.updateOne(
+            { _id: user._id },
+            { $inc: { balance: totalRefund + totalCommission, commission: totalCommission, commissionToday: totalCommission } }
+          );
+          const taskUpdatePromise = Task.updateOne(
+            { _id: task._id },
+            { $set: { products: updatedProducts, status: 'Completed', completedAt: now } }
+          );
+
+          await Promise.all([userUpdatePromise, taskUpdatePromise]);
+
+          // Fire-and-forget referral distribution
+          (async () => {
+            try {
+              const sourceRef = `task:${task._id}:completed`;
+              await distributeReferralCommission({
+                sourceUserId: user._id,
+                originalAmount: totalCommission,
+                sourceReference: sourceRef,
+                sourceType: 'task',
+                note: `Referral from combo task ${task._id}`
+              });
+            } catch (err) {
+              console.error('Referral distribution failed (combo, async):', err);
+            }
+          })();
+
+          // Post-completion bookkeeping (registeredWorkingDays etc) - same as before
+          try {
+            const taskSet = task.set || 1;
+            const vipInfo = vipRules[user.vipLevel] || vipRules[1];
+            const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
+            if (completedCount >= (vipInfo.tasks || 40)) {
+              const todayKey = getUKDateKey();
+              const updates = {
+                $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
+                $set: { setStartingBalance: null, resetRequested: true }
+              };
+              await User.updateOne({ _id: user._id }, updates);
+            }
+          } catch (err) {
+            console.error('post-combo-completion bookkeeping failed:', err);
+          }
+
+          const responseTask = {
+            ...task,
+            products: updatedProducts,
+            status: 'Completed',
+            completedAt: now
+          };
+
+          return res.json({ success: true, task: responseTask });
+        }
+
+        // Otherwise: per-product submission (requires comboIndex)
+        if (typeof comboIndex !== 'number' || comboIndex < 0 || comboIndex >= task.products.length) {
+          return res.status(400).json({ success: false, message: 'comboIndex (product index) is required for per-product combo submission.' });
+        }
+
+        // Re-fetch a writable task document (not lean) to update and recompute safely
+        const taskDoc = await Task.findById(task._id);
+        if (!taskDoc) return res.status(404).json({ success: false, message: 'Task not found' });
+
+        // Ensure product exists and is pending
+        const prod = taskDoc.products[comboIndex];
+        if (!prod) return res.status(404).json({ success: false, message: 'Combo product not found' });
+        if (String(prod.status).toLowerCase() !== 'pending') {
+          return res.status(409).json({ success: false, message: 'Product already submitted or not pending' });
+        }
+        if (prod.frozen) {
+          return res.status(409).json({ success: false, message: 'This product is frozen and cannot be submitted right now', code: 'FROZEN' });
+        }
+
+        // Disallow submit if user has negative balance (same as before)
         if (user.balance < 0) {
           return res.json({ success: false, mustDeposit: true, message: "Insufficient balance. Please deposit to clear negative balance before submitting combo products." });
         }
 
+        // Mark this product completed and credit user for this product only
         const now = new Date().toISOString();
-        const updatedProducts = task.products.map(prod => ({ ...prod, status: 'Completed', submitted: true, completedAt: now }));
+        const price = Number(prod.price || 0);
+        const vipInfo = vipRules[user.vipLevel] || vipRules[1];
+        const commission = (typeof prod.commission === 'number' && !Number.isNaN(prod.commission))
+          ? prod.commission
+          : Math.floor(price * (vipInfo.commissionRate || 0) * 100) / 100;
 
-        const totalRefund = updatedProducts.reduce((sum, prod) => sum + Number(prod.price || 0), 0);
-        const totalCommission = updatedProducts.reduce((sum, prod) => sum + Number(prod.commission || 0), 0);
+        // Update product in task document
+        taskDoc.products[comboIndex].status = 'Completed';
+        taskDoc.products[comboIndex].submitted = true;
+        taskDoc.products[comboIndex].completedAt = now;
+        taskDoc.products[comboIndex].frozen = false;
 
-        // Parallel updates: user balance and task status
-        const userUpdatePromise = User.updateOne(
+        // Recompute frozen flags for remaining pending products:
+        const pendingProductsWithIndex = taskDoc.products
+          .map((p, idx) => ({ p, idx }))
+          .filter(x => String(x.p.status).toLowerCase() === 'pending');
+
+        if (pendingProductsWithIndex.length > 0) {
+          // pick newest pending by createdAt/startedAt (latest timestamp)
+          pendingProductsWithIndex.sort((a, b) => {
+            const ta = new Date(a.p.createdAt || a.p.startedAt || 0).getTime();
+            const tb = new Date(b.p.createdAt || b.p.startedAt || 0).getTime();
+            return tb - ta; // descending (newest first)
+          });
+          const newestIdx = pendingProductsWithIndex[0].idx;
+          // set frozen=false for newest pending, true for others
+          taskDoc.products.forEach((p, idx) => {
+            if (String(p.status).toLowerCase() === 'pending') {
+              p.frozen = idx !== newestIdx;
+            } else {
+              p.frozen = false;
+            }
+          });
+        } else {
+          // no pending left -> mark all frozen=false
+          taskDoc.products.forEach(p => { p.frozen = false; });
+        }
+
+        // If all products completed -> mark task Completed
+        const allCompleted = taskDoc.products.every(p => String(p.status).toLowerCase() === 'completed');
+        if (allCompleted) {
+          taskDoc.status = 'Completed';
+          taskDoc.completedAt = now;
+        }
+
+        // Save task update
+        await taskDoc.save();
+
+        // Credit user for this product only
+        await User.updateOne(
           { _id: user._id },
-          { $inc: { balance: totalRefund + totalCommission, commission: totalCommission, commissionToday: totalCommission } }
-        );
-        const taskUpdatePromise = Task.updateOne(
-          { _id: task._id },
-          { $set: { products: updatedProducts, status: 'Completed', completedAt: now } }
+          { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
         );
 
-        await Promise.all([userUpdatePromise, taskUpdatePromise]);
-
-        // Fire-and-forget referral distribution so we return quickly (<1.5s)
+        // Fire-and-forget referral distribution for this product
         (async () => {
           try {
-            const sourceRef = `task:${task._id}:completed`;
+            const sourceRef = `task:${task._id}:product:${comboIndex}:completed`;
             await distributeReferralCommission({
               sourceUserId: user._id,
-              originalAmount: totalCommission,
+              originalAmount: commission,
               sourceReference: sourceRef,
-              sourceType: 'task',
-              note: `Referral from combo task ${task._id}`
+              sourceType: 'task_product',
+              note: `Referral from task ${task._id} product index ${comboIndex}`
             });
           } catch (err) {
-            console.error('Referral distribution failed (combo, async):', err);
+            console.error('Referral distribution failed (combo-product, async):', err);
           }
         })();
 
-        // After marking completed, check if the set is now complete
+        // After marking this product completed, check whether the set is finished (only when task.completed)
         try {
-          const taskSet = task.set || 1;
-          const vipInfo = vipRules[user.vipLevel] || vipRules[1];
-          const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
-          if (completedCount >= (vipInfo.tasks || 40)) {
-            const todayKey = getUKDateKey();
-            // Atomically increment registeredWorkingDays[todayKey], and mark that reset is requested.
-            // IMPORTANT: do NOT auto-increment currentSet anymore.
-            const updates = {
-              $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
-              $set: { setStartingBalance: null, resetRequested: true }
-            };
-            await User.updateOne({ _id: user._id }, updates);
-            // do NOT increment currentSet automatically here
+          if (allCompleted) {
+            const taskSet = task.set || 1;
+            const vipInfoAgain = vipRules[user.vipLevel] || vipRules[1];
+            const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
+            if (completedCount >= (vipInfoAgain.tasks || 40)) {
+              const todayKey = getUKDateKey();
+              const updates = {
+                $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
+                $set: { setStartingBalance: null, resetRequested: true }
+              };
+              await User.updateOne({ _id: user._id }, updates);
+            }
           }
         } catch (err) {
-          console.error('post-combo-completion bookkeeping failed:', err);
+          console.error('post-product-completion bookkeeping failed:', err);
         }
 
-        // Construct response without doing another DB read
-        const responseTask = {
-          ...task,
-          products: updatedProducts,
-          status: 'Completed',
-          completedAt: now
-        };
-
-        return res.json({ success: true, task: responseTask });
+        // Build response (return updated task document)
+        const updatedTask = await Task.findById(task._id).lean();
+        return res.json({ success: true, task: updatedTask });
       }
 
       // Normal task flow
