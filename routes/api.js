@@ -862,33 +862,38 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
     let records = [];
     tasks.forEach(t => {
         if (t.isCombo && Array.isArray(t.products)) {
-            // Task-level status Pending -> expose each product as its own record
+            // For combo tasks, return one record per product.
+            // Important: Only the last product should be actionable (Pending + canSubmit true).
             if (String(t.status).toLowerCase() === 'pending') {
-                // map each product and preserve its frozen flag if present
+                const lastIdx = t.products.length - 1;
                 t.products.forEach((prod, idx) => {
-                    const isFrozen = !!prod.frozen;
+                    // Determine frozen flag:
+                    // - If server stored prod.frozen (older code), prefer it.
+                    // - Otherwise compute: all except last index are frozen.
+                    const isFrozen = (typeof prod.frozen === 'boolean') ? !!prod.frozen : (idx !== lastIdx);
+
                     records.push({
                         ...t.toObject ? t.toObject() : { ...t },
                         comboIndex: idx,
-                        // the UI expects status; keep 'Pending' for display but clients should use product.frozen
-                        status: 'Pending',
-                        canSubmit: !isFrozen, // only unfrozen product is allowed to show submit
+                        // set status per product so client can use it directly
+                        status: isFrozen ? 'Frozen' : 'Pending',
+                        canSubmit: !isFrozen, // only last product (unfrozen) can submit
+                        comboGroupId: t.comboGroupId || t.taskCode || null,
                         product: {
                             ...prod,
-                            frozen: isFrozen,
-                            // Backwards compatible alias
-                            isFrozen
+                            frozen: isFrozen
                         }
                     });
                 });
             } else {
-                // Completed combo -> show all products as Completed
+                // completed combo -> all products completed
                 t.products.forEach((prod, idx) => {
                     records.push({
                         ...t.toObject ? t.toObject() : { ...t },
                         comboIndex: idx,
                         canSubmit: false,
                         status: 'Completed',
+                        comboGroupId: t.comboGroupId || t.taskCode || null,
                         product: {
                             ...prod,
                             frozen: false
@@ -897,9 +902,11 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
                 });
             }
         } else {
+            // Non-combo tasks: return a single record (unchanged)
             records.push({
                 ...t.toObject ? t.toObject() : { ...t },
-                canSubmit: true
+                canSubmit: !t.product?.submitted && String(t.status || '').toLowerCase() === 'pending',
+                comboGroupId: t.comboGroupId || null
             });
         }
     });
@@ -935,16 +942,6 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         // counts
         const tasksStarted = tasks.length;
         const tasksCompleted = tasks.filter(t => (t.status || '').toLowerCase() === 'completed').length;
-
-        // DEBUG: helpful log to diagnose off-by-one issues (remove or reduce level in prod)
-        console.log('start-task debug', {
-          username: user.username,
-          userSet,
-          tasksStarted,
-          tasksCompleted,
-          tasksPreview: tasks.map(t => ({ _id: t._id, set: t.set, status: t.status, startedAt: t.startedAt || t.createdAt })),
-          comboTriggers: combos.map(c => ({ _id: c._id, trigger: c.triggerTaskNumber }))
-        });
 
         // use the filtered tasks (same set) for pending-checks
         if (hasPendingComboTask(tasks || [], user)) {
@@ -1049,7 +1046,9 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 startedAt: now,
                 taskCode,
                 set: userSet,
-                isCombo: true
+                isCombo: true,
+                // set comboGroupId so clients can group by it and only combo items are affected
+                comboGroupId: taskCode
             };
 
             await Task.create(comboTask);
@@ -1061,7 +1060,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 success: true,
                 task: comboTask,
                 isCombo: true,
-                comboMustSubmitAllAtOnce: false, // prefer per-product submit by default (but last product triggers full submit)
+                comboMustSubmitAllAtOnce: false, // prefer per-product submit by default (last product triggers full submit)
                 currentBalance: updatedUser.balance,
                 isNegativeBalance: isNegative
             });
@@ -1378,7 +1377,7 @@ router.post('/deposit', verifyUserToken, async (req, res) => {
 });
 
 // Withdraw
-// Middleware checkPlatformStatus applied here to block when platformClosed.
+// Middleware checkPlatformStatus applied here to block when platformClosed. (unchanged)
 router.post('/withdraw', verifyUserToken, checkPlatformStatus, async (req, res) => {
     const { amount, withdrawPassword } = req.body;
     const user = req.user;
