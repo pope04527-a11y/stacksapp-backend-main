@@ -1061,7 +1061,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 success: true,
                 task: comboTask,
                 isCombo: true,
-                comboMustSubmitAllAtOnce: false, // prefer per-product submit by default
+                comboMustSubmitAllAtOnce: false, // prefer per-product submit by default (but last product triggers full submit)
                 currentBalance: updatedUser.balance,
                 isNegativeBalance: isNegative
             });
@@ -1125,8 +1125,12 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
 
       // Combo tasks
       if (task.isCombo && Array.isArray(task.products)) {
-        // If submitAll is set (backwards-compatible), preserve old behaviour (mark all completed)
-        if (submitAll) {
+        // If submitAll is set (legacy/backwards-compatible) OR the client targeted the last combo index,
+        // treat as completing the entire combo (the UX requirement: only last product submits all).
+        const lastIndex = task.products.length - 1;
+        const isLastIndexSubmission = (typeof comboIndex === 'number' && comboIndex === lastIndex);
+
+        if (submitAll || isLastIndexSubmission) {
           if (user.balance < 0) {
             return res.json({ success: false, mustDeposit: true, message: "Insufficient balance. Please deposit to clear negative balance before submitting combo products." });
           }
@@ -1192,124 +1196,13 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           return res.json({ success: true, task: responseTask });
         }
 
-        // Otherwise: per-product submission (requires comboIndex)
-        if (typeof comboIndex !== 'number' || comboIndex < 0 || comboIndex >= task.products.length) {
-          return res.status(400).json({ success: false, message: 'comboIndex (product index) is required for per-product combo submission.' });
-        }
-
-        // Re-fetch a writable task document (not lean) to update and recompute safely
-        const taskDoc = await Task.findById(task._id);
-        if (!taskDoc) return res.status(404).json({ success: false, message: 'Task not found' });
-
-        // Ensure product exists and is pending
-        const prod = taskDoc.products[comboIndex];
-        if (!prod) return res.status(404).json({ success: false, message: 'Combo product not found' });
-        if (String(prod.status).toLowerCase() !== 'pending') {
-          return res.status(409).json({ success: false, message: 'Product already submitted or not pending' });
-        }
-        if (prod.frozen) {
-          return res.status(409).json({ success: false, message: 'This product is frozen and cannot be submitted right now', code: 'FROZEN' });
-        }
-
-        // Disallow submit if user has negative balance (same as before)
-        if (user.balance < 0) {
-          return res.json({ success: false, mustDeposit: true, message: "Insufficient balance. Please deposit to clear negative balance before submitting combo products." });
-        }
-
-        // Mark this product completed and credit user for this product only
-        const now = new Date().toISOString();
-        const price = Number(prod.price || 0);
-        const vipInfo = vipRules[user.vipLevel] || vipRules[1];
-        const commission = (typeof prod.commission === 'number' && !Number.isNaN(prod.commission))
-          ? prod.commission
-          : Math.floor(price * (vipInfo.commissionRate || 0) * 100) / 100;
-
-        // Update product in task document
-        taskDoc.products[comboIndex].status = 'Completed';
-        taskDoc.products[comboIndex].submitted = true;
-        taskDoc.products[comboIndex].completedAt = now;
-        taskDoc.products[comboIndex].frozen = false;
-
-        // Recompute frozen flags for remaining pending products:
-        const pendingProductsWithIndex = taskDoc.products
-          .map((p, idx) => ({ p, idx }))
-          .filter(x => String(x.p.status).toLowerCase() === 'pending');
-
-        if (pendingProductsWithIndex.length > 0) {
-          // pick newest pending by createdAt/startedAt (latest timestamp)
-          pendingProductsWithIndex.sort((a, b) => {
-            const ta = new Date(a.p.createdAt || a.p.startedAt || 0).getTime();
-            const tb = new Date(b.p.createdAt || b.p.startedAt || 0).getTime();
-            return tb - ta; // descending (newest first)
-          });
-          const newestIdx = pendingProductsWithIndex[0].idx;
-          // set frozen=false for newest pending, true for others
-          taskDoc.products.forEach((p, idx) => {
-            if (String(p.status).toLowerCase() === 'pending') {
-              p.frozen = idx !== newestIdx;
-            } else {
-              p.frozen = false;
-            }
-          });
-        } else {
-          // no pending left -> mark all frozen=false
-          taskDoc.products.forEach(p => { p.frozen = false; });
-        }
-
-        // If all products completed -> mark task Completed
-        const allCompleted = taskDoc.products.every(p => String(p.status).toLowerCase() === 'completed');
-        if (allCompleted) {
-          taskDoc.status = 'Completed';
-          taskDoc.completedAt = now;
-        }
-
-        // Save task update
-        await taskDoc.save();
-
-        // Credit user for this product only
-        await User.updateOne(
-          { _id: user._id },
-          { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
-        );
-
-        // Fire-and-forget referral distribution for this product
-        (async () => {
-          try {
-            const sourceRef = `task:${task._id}:product:${comboIndex}:completed`;
-            await distributeReferralCommission({
-              sourceUserId: user._id,
-              originalAmount: commission,
-              sourceReference: sourceRef,
-              sourceType: 'task_product',
-              note: `Referral from task ${task._id} product index ${comboIndex}`
-            });
-          } catch (err) {
-            console.error('Referral distribution failed (combo-product, async):', err);
-          }
-        })();
-
-        // After marking this product completed, check whether the set is finished (only when task.completed)
-        try {
-          if (allCompleted) {
-            const taskSet = task.set || 1;
-            const vipInfoAgain = vipRules[user.vipLevel] || vipRules[1];
-            const completedCount = await Task.countDocuments({ username: user.username, set: taskSet, status: { $regex: /^completed$/i } });
-            if (completedCount >= (vipInfoAgain.tasks || 40)) {
-              const todayKey = getUKDateKey();
-              const updates = {
-                $inc: { [`registeredWorkingDays.${todayKey}`]: 1 },
-                $set: { setStartingBalance: null, resetRequested: true }
-              };
-              await User.updateOne({ _id: user._id }, updates);
-            }
-          }
-        } catch (err) {
-          console.error('post-product-completion bookkeeping failed:', err);
-        }
-
-        // Build response (return updated task document)
-        const updatedTask = await Task.findById(task._id).lean();
-        return res.json({ success: true, task: updatedTask });
+        // If reached here, client attempted to submit a combo product that is not the last index.
+        // Per your requested UX, we disallow submitting any non-last combo product.
+        return res.status(409).json({
+          success: false,
+          message: 'Only the last product in a combo may be submitted. Submit the last product to complete the combo.',
+          code: 'NOT_LAST_PRODUCT'
+        });
       }
 
       // Normal task flow
