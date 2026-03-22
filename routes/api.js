@@ -32,10 +32,6 @@ const userSchema = new mongoose.Schema({
   setStartingBalance: { type: Number, default: null },
   createdAt: String,
 
-  // Persisted frozen amount so frontend can show deducted amount across refreshes.
-  // This is intentionally separate from task records to avoid touching record shapes.
-  frozenAmount: { type: Number, default: 0 },
-
   // New fields for cross-device sign-in and working-day recording
   // registeredWorkingDays: map { "YYYY-MM-DD": numberOfSetsCompleted }
   registeredWorkingDays: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -43,7 +39,10 @@ const userSchema = new mongoose.Schema({
   signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } },
 
   // Manual reset flag: user requests reset for next set (must be processed by admin or via explicit endpoint)
-  resetRequested: { type: Boolean, default: false }
+  resetRequested: { type: Boolean, default: false },
+
+  // Persisted frozen amount so frontend can show deducted amount across refreshes.
+  frozenAmount: { type: Number, default: 0 }
 }, { collection: 'users', strict: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -791,7 +790,6 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             registeredSetsToday,
             signState: dbUser.signState || { signedCount: 0, lastSignDate: null },
             resetRequested: !!dbUser.resetRequested,
-            // NEW: expose persisted frozenAmount for frontend to show deducted amount across refresh
             frozenAmount: Number(dbUser.frozenAmount || 0)
         }
     });
