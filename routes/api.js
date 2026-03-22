@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema({
   setStartingBalance: { type: Number, default: null },
   createdAt: String,
 
+  // Persisted frozen amount so frontend can show deducted amount across refreshes.
+  // This is intentionally separate from task records to avoid touching record shapes.
+  frozenAmount: { type: Number, default: 0 },
+
   // New fields for cross-device sign-in and working-day recording
   // registeredWorkingDays: map { "YYYY-MM-DD": numberOfSetsCompleted }
   registeredWorkingDays: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -631,7 +635,8 @@ router.post('/users/register', async (req, res) => {
         suspended: false,
         token: crypto.randomBytes(24).toString('hex'),
         createdAt: new Date().toISOString(),
-        currentSet: 1
+        currentSet: 1,
+        frozenAmount: 0
     };
 
     // Ensure _id is provided because the schema declares _id: String (Mongoose won't auto-generate a string _id)
@@ -785,7 +790,9 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             registeredWorkingDays: regMap,
             registeredSetsToday,
             signState: dbUser.signState || { signedCount: 0, lastSignDate: null },
-            resetRequested: !!dbUser.resetRequested
+            resetRequested: !!dbUser.resetRequested,
+            // NEW: expose persisted frozenAmount for frontend to show deducted amount across refresh
+            frozenAmount: Number(dbUser.frozenAmount || 0)
         }
     });
 });
@@ -860,10 +867,6 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
     const tasks = await Task.find({ username: req.user.username });
     const user = req.user;
     let records = [];
-
-    // Compute frozenTotal (sum of prices for pending/frozen products)
-    let frozenTotal = 0;
-
     tasks.forEach(t => {
         if (t.isCombo && Array.isArray(t.products)) {
             // For combo tasks, return one record per product.
@@ -875,10 +878,6 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
                     // - If server stored prod.frozen (older code), prefer it.
                     // - Otherwise compute: all except last index are frozen.
                     const isFrozen = (typeof prod.frozen === 'boolean') ? !!prod.frozen : (idx !== lastIdx);
-
-                    if (isFrozen && prod && typeof prod.price === 'number') {
-                      frozenTotal += Number(prod.price || 0);
-                    }
 
                     records.push({
                         ...t.toObject ? t.toObject() : { ...t },
@@ -910,29 +909,16 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
                 });
             }
         } else {
-            // Non-combo tasks: return a single record (ensure product.frozen included)
-            const product = (t.product && typeof t.product === 'object') ? { ...t.product } : {};
-            const isPending = String(t.status || '').toLowerCase() === 'pending';
-            // If product.frozen exists, respect it, otherwise treat pending as frozen
-            const isFrozen = (typeof product.frozen === 'boolean') ? !!product.frozen : !!isPending;
-
-            if (isFrozen && product && typeof product.price === 'number') {
-              frozenTotal += Number(product.price || 0);
-            }
-
+            // Non-combo tasks: return a single record (unchanged)
             records.push({
                 ...t.toObject ? t.toObject() : { ...t },
-                canSubmit: !product?.submitted && isPending,
-                comboGroupId: t.comboGroupId || null,
-                product: {
-                  ...product,
-                  frozen: isFrozen
-                }
+                canSubmit: !t.product?.submitted && String(t.status || '').toLowerCase() === 'pending',
+                comboGroupId: t.comboGroupId || null
             });
         }
     });
     records.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
-    res.json({ success: true, records, frozenTotal });
+    res.json({ success: true, records });
 });
 
 // Start task (with 30% starting-capital enforcement)
@@ -1033,9 +1019,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
               return res.status(400).json({ success: false, message: `Combo total (${comboTotal.toFixed(2)} GBP) does not meet the minimum starting-capital rule (${minAllowedPrice.toFixed(2)} GBP).` });
             }
 
+            // Deduct balance and increment user's frozenAmount atomically
             await User.updateOne(
                 { _id: user._id },
-                { $inc: { balance: -comboTotal } }
+                { $inc: { balance: -comboTotal, frozenAmount: comboTotal } }
             );
 
             const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1093,9 +1080,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         }
         const commission = Math.floor(chosenProduct.price * vipInfo.commissionRate * 100) / 100;
 
+        // Deduct balance and increment user's frozenAmount atomically
         await User.updateOne(
             { _id: user._id },
-            { $inc: { balance: -chosenProduct.price } }
+            { $inc: { balance: -chosenProduct.price, frozenAmount: chosenProduct.price } }
         );
 
         const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1110,10 +1098,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 createdAt: new Date().toISOString(),
                 code: crypto.randomBytes(6).toString('hex'),
                 public_id: chosenProduct.public_id,
-                description: chosenProduct.description,
-                // Persist frontend-expected flag so frozen total survives refresh
-                frozen: true,
-                submitted: false
+                description: chosenProduct.description
             },
             status: 'Pending',
             startedAt: new Date().toISOString(),
@@ -1123,10 +1108,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 
         await Task.create(task);
 
-        // Return current balance (parity with combo branch)
+        // Return current balance and frozenAmount for client convenience
         const updatedUserAfter = await User.findById(user._id);
 
-        res.json({ success: true, task, currentBalance: updatedUserAfter.balance });
+        res.json({ success: true, task, currentBalance: updatedUserAfter.balance, frozenAmount: Number(updatedUserAfter.frozenAmount || 0) });
     } catch (err) {
         console.error('start-task error:', err);
         res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
@@ -1168,9 +1153,10 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           const totalCommission = updatedProducts.reduce((sum, prod) => sum + Number(prod.commission || 0), 0);
 
           // Parallel updates: user balance and task status
+          // IMPORTANT: decrement frozenAmount by totalRefund (release the frozen money)
           const userUpdatePromise = User.updateOne(
             { _id: user._id },
-            { $inc: { balance: totalRefund + totalCommission, commission: totalCommission, commissionToday: totalCommission } }
+            { $inc: { balance: totalRefund + totalCommission, frozenAmount: -totalRefund, commission: totalCommission, commissionToday: totalCommission } }
           );
           const taskUpdatePromise = Task.updateOne(
             { _id: task._id },
@@ -1178,6 +1164,16 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           );
 
           await Promise.all([userUpdatePromise, taskUpdatePromise]);
+
+          // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
+          try {
+            const refreshed = await User.findById(user._id);
+            if (refreshed && refreshed.frozenAmount < 0) {
+              await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
+            }
+          } catch (e) {
+            // ignore
+          }
 
           // Fire-and-forget referral distribution
           (async () => {
@@ -1242,18 +1238,28 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
       const now = new Date().toISOString();
 
       // Parallel updates: user and task (fast)
+      // IMPORTANT: when refunding, decrement frozenAmount by the refunded price
       const userUpdatePromise = User.updateOne(
         { _id: user._id },
-        { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
+        { $inc: { balance: price + commission, frozenAmount: -price, commission: commission, commissionToday: commission } }
       );
 
-      // Clear frozen flag when marking completed
       const taskUpdatePromise = Task.updateOne(
         { _id: task._id },
-        { $set: { status: 'Completed', completedAt: now, 'product.commission': commission, 'product.frozen': false } }
+        { $set: { status: 'Completed', completedAt: now, 'product.commission': commission } }
       );
 
       await Promise.all([userUpdatePromise, taskUpdatePromise]);
+
+      // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
+      try {
+        const refreshed = await User.findById(user._id);
+        if (refreshed && refreshed.frozenAmount < 0) {
+          await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
+        }
+      } catch (e) {
+        // ignore
+      }
 
       // Fire-and-forget referral distribution (async) so we don't block the response
       (async () => {
