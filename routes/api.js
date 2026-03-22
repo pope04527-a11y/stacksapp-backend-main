@@ -1,4 +1,3 @@
-// File: api (3).js
 const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -861,10 +860,6 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
     const tasks = await Task.find({ username: req.user.username });
     const user = req.user;
     let records = [];
-
-    // We'll compute frozenTotal: sum of all pending/frozen product prices for this user
-    let frozenTotal = 0;
-
     tasks.forEach(t => {
         if (t.isCombo && Array.isArray(t.products)) {
             // For combo tasks, return one record per product.
@@ -876,11 +871,6 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
                     // - If server stored prod.frozen (older code), prefer it.
                     // - Otherwise compute: all except last index are frozen.
                     const isFrozen = (typeof prod.frozen === 'boolean') ? !!prod.frozen : (idx !== lastIdx);
-
-                    // Add to frozenTotal if frozen and price present
-                    if (isFrozen && prod && typeof prod.price === 'number') {
-                      frozenTotal += Number(prod.price || 0);
-                    }
 
                     records.push({
                         ...t.toObject ? t.toObject() : { ...t },
@@ -913,31 +903,15 @@ router.get('/task-records', verifyUserToken, async (req, res) => {
             }
         } else {
             // Non-combo tasks: return a single record (unchanged)
-            // Ensure we expose product.frozen (default false) so clients can show it
-            const product = (t.product && typeof t.product === 'object') ? { ...t.product } : {};
-            const isPending = String(t.status || '').toLowerCase() === 'pending';
-            const isFrozen = (typeof product.frozen === 'boolean') ? !!product.frozen : !!isPending; // pending => frozen by default
-
-            // Add to frozenTotal if frozen and price present
-            if (isFrozen && product && typeof product.price === 'number') {
-              frozenTotal += Number(product.price || 0);
-            }
-
             records.push({
                 ...t.toObject ? t.toObject() : { ...t },
-                canSubmit: !product?.submitted && isPending,
-                comboGroupId: t.comboGroupId || null,
-                product: {
-                  ...product,
-                  frozen: isFrozen
-                }
+                canSubmit: !t.product?.submitted && String(t.status || '').toLowerCase() === 'pending',
+                comboGroupId: t.comboGroupId || null
             });
         }
     });
     records.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
-
-    // Return frozenTotal alongside records for convenience (client can use frozenTotal directly)
-    return res.json({ success: true, records, frozenTotal });
+    res.json({ success: true, records });
 });
 
 // Start task (with 30% starting-capital enforcement)
@@ -1098,7 +1072,6 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         }
         const commission = Math.floor(chosenProduct.price * vipInfo.commissionRate * 100) / 100;
 
-        // Deduct the product price from user's balance (frozen by server-side semantics)
         await User.updateOne(
             { _id: user._id },
             { $inc: { balance: -chosenProduct.price } }
@@ -1116,10 +1089,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
                 createdAt: new Date().toISOString(),
                 code: crypto.randomBytes(6).toString('hex'),
                 public_id: chosenProduct.public_id,
-                description: chosenProduct.description,
-                // NEW: mark single task product as frozen so clients and task-records can show frozen totals
-                frozen: true,
-                submitted: false
+                description: chosenProduct.description
             },
             status: 'Pending',
             startedAt: new Date().toISOString(),
@@ -1129,10 +1099,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 
         await Task.create(task);
 
-        // Return current balance as well (parity with combo response)
-        const updatedUserAfter = await User.findById(user._id);
-
-        res.json({ success: true, task, currentBalance: updatedUserAfter.balance });
+        res.json({ success: true, task });
     } catch (err) {
         console.error('start-task error:', err);
         res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
@@ -1253,10 +1220,9 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
         { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
       );
 
-      // Ensure frozen flag is cleared when marking completed
       const taskUpdatePromise = Task.updateOne(
         { _id: task._id },
-        { $set: { status: 'Completed', completedAt: now, 'product.commission': commission, 'product.frozen': false } }
+        { $set: { status: 'Completed', completedAt: now, 'product.commission': commission } }
       );
 
       await Promise.all([userUpdatePromise, taskUpdatePromise]);
