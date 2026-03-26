@@ -39,10 +39,7 @@ const userSchema = new mongoose.Schema({
   signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } },
 
   // Manual reset flag: user requests reset for next set (must be processed by admin or via explicit endpoint)
-  resetRequested: { type: Boolean, default: false },
-
-  // Persisted frozen amount so frontend can show deducted amount across refreshes.
-  frozenAmount: { type: Number, default: 0 }
+  resetRequested: { type: Boolean, default: false }
 }, { collection: 'users', strict: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -76,6 +73,101 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET || 'zeU4nedVzVzvqqndh2MF82AdRiI',
     secure: true
 });
+
+// ---------------- Admin notification helpers (Telegram / Slack) ----------------
+// Place your TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in environment variables.
+// Optional: SLACK_WEBHOOK_URL for Slack notifications.
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
+
+// Robust extraction of client IP from request (x-forwarded-for, req.ip, connection, socket)
+function getClientIp(req) {
+  try {
+    const xf = req.headers['x-forwarded-for'] || req.headers['X-Forwarded-For'];
+    if (xf && typeof xf === 'string') {
+      const parts = xf.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length) return parts[0];
+    }
+    if (req.ip) return req.ip;
+    if (req.connection && req.connection.remoteAddress) return req.connection.remoteAddress;
+    if (req.socket && req.socket.remoteAddress) return req.socket.remoteAddress;
+    return "unknown";
+  } catch (e) {
+    return "unknown";
+  }
+}
+
+// Best-effort geo lookup using ip-api.com (free service, rate-limited). Returns object or null.
+async function getGeoForIp(ip) {
+  if (!ip || ip === "unknown") return null;
+  try {
+    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city,zip,lat,lon,isp,org,query,message`;
+    const r = await axios.get(url, { timeout: 2500 });
+    if (r && r.data && r.data.status === "success") {
+      return r.data;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Fire-and-forget admin notification (Telegram + optional Slack). Minimal info only.
+async function notifyAdmin({ event = "unknown", user = {}, req = null, extra = {} } = {}) {
+  try {
+    const ip = req ? getClientIp(req) : (extra.ip || "unknown");
+    const geo = await getGeoForIp(ip);
+    const time = new Date().toISOString();
+
+    // Build readable location snippet
+    let locationText = "";
+    if (geo) {
+      locationText = `${geo.city || ""}${geo.regionName ? ", " + geo.regionName : ""}${geo.country ? ", " + geo.country : ""}`.replace(/^, /, "");
+      if (geo.isp) locationText += ` — ${geo.isp}`;
+    } else if (extra.location) {
+      locationText = String(extra.location);
+    } else {
+      locationText = "Location not available";
+    }
+
+    // Minimal user info (avoid sensitive fields)
+    const usernameLine = `username: ${user.username || user.user || user.name || ""}`;
+    const userIdLine = `userId: ${user._id || user.id || ""}`;
+
+    const eventLine = `<b>${event.toUpperCase()}</b>`;
+    const message = `${eventLine}\n${usernameLine}\n${userIdLine}\nIP: <code>${ip}</code>\nLocation: ${locationText}\nTime: ${time}`;
+
+    // Telegram
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+      try {
+        const tgUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        await axios.post(tgUrl, {
+          chat_id: TELEGRAM_CHAT_ID,
+          text: message,
+          parse_mode: "HTML",
+        }, { timeout: 3000 });
+      } catch (e) {
+        console.warn('notifyAdmin: telegram send failed', e && e.message ? e.message : e);
+      }
+    }
+
+    // Slack (optional)
+    if (SLACK_WEBHOOK_URL) {
+      try {
+        const slackText = `${event.toUpperCase()} — ${user.username || user._id || ""}\nIP: ${ip}\nLocation: ${locationText}\nTime: ${time}`;
+        await axios.post(SLACK_WEBHOOK_URL, { text: slackText }, { timeout: 3000 });
+      } catch (e) {
+        console.warn('notifyAdmin: slack send failed', e && e.message ? e.message : e);
+      }
+    }
+
+    console.log(`notifyAdmin: ${event} ${user.username || user._id || ''} ip=${ip} loc=${locationText}`);
+  } catch (err) {
+    console.error('notifyAdmin error:', err && err.message ? err.message : err);
+  }
+}
+// ---------------- end notification helpers ----------------
 
 // ========== Product cache & helpers (pre-warm + in-flight dedupe + periodic refresh) ==========
 const CLOUDINARY_CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
@@ -634,14 +726,21 @@ router.post('/users/register', async (req, res) => {
         suspended: false,
         token: crypto.randomBytes(24).toString('hex'),
         createdAt: new Date().toISOString(),
-        currentSet: 1,
-        frozenAmount: 0
+        currentSet: 1
     };
 
     // Ensure _id is provided because the schema declares _id: String (Mongoose won't auto-generate a string _id)
     try {
       newUser._id = newUser._id || crypto.randomBytes(12).toString('hex');
       const created = await User.create(newUser);
+
+      // Notify admin (fire-and-forget) about new registration
+      (async () => {
+        try {
+          await notifyAdmin({ event: "user_registered", user: { username: created.username, _id: created._id }, req });
+        } catch (e) { /* ignore notify errors */ }
+      })();
+
       return res.json({ success: true, user: created });
     } catch (err) {
       console.error('users/register create error:', err && err.stack ? err.stack : err);
@@ -651,6 +750,14 @@ router.post('/users/register', async (req, res) => {
         try {
           newUser._id = crypto.randomBytes(16).toString('hex');
           const created2 = await User.create(newUser);
+
+          // Notify admin (fire-and-forget) about new registration (retry branch)
+          (async () => {
+            try {
+              await notifyAdmin({ event: "user_registered", user: { username: created2.username, _id: created2._id }, req });
+            } catch (e) { /* ignore notify errors */ }
+          })();
+
           return res.json({ success: true, user: created2 });
         } catch (err2) {
           console.error('users/register retry failed:', err2 && err2.stack ? err2.stack : err2);
@@ -694,6 +801,13 @@ router.post('/login', async (req, res) => {
       console.error('Failed to create session:', err && err.message ? err.message : err);
       return res.status(500).json({ success: false, message: 'Failed to create session' });
     }
+
+    // Notify admin about login (fire-and-forget)
+    (async () => {
+      try {
+        await notifyAdmin({ event: "user_logged_in", user: { username: user.username, _id: user._id }, req });
+      } catch (e) { /* ignore notify errors */ }
+    })();
 
     // pre-warm product cache (non-blocking)
     fetchProductsFromCloudinary().catch(err => {
@@ -789,8 +903,7 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             registeredWorkingDays: regMap,
             registeredSetsToday,
             signState: dbUser.signState || { signedCount: 0, lastSignDate: null },
-            resetRequested: !!dbUser.resetRequested,
-            frozenAmount: Number(dbUser.frozenAmount || 0)
+            resetRequested: !!dbUser.resetRequested
         }
     });
 });
@@ -1017,10 +1130,9 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
               return res.status(400).json({ success: false, message: `Combo total (${comboTotal.toFixed(2)} GBP) does not meet the minimum starting-capital rule (${minAllowedPrice.toFixed(2)} GBP).` });
             }
 
-            // Deduct balance and increment user's frozenAmount atomically
             await User.updateOne(
                 { _id: user._id },
-                { $inc: { balance: -comboTotal, frozenAmount: comboTotal } }
+                { $inc: { balance: -comboTotal } }
             );
 
             const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1078,10 +1190,9 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         }
         const commission = Math.floor(chosenProduct.price * vipInfo.commissionRate * 100) / 100;
 
-        // Deduct balance and increment user's frozenAmount atomically
         await User.updateOne(
             { _id: user._id },
-            { $inc: { balance: -chosenProduct.price, frozenAmount: chosenProduct.price } }
+            { $inc: { balance: -chosenProduct.price } }
         );
 
         const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1106,10 +1217,7 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 
         await Task.create(task);
 
-        // Return current balance and frozenAmount for client convenience
-        const updatedUserAfter = await User.findById(user._id);
-
-        res.json({ success: true, task, currentBalance: updatedUserAfter.balance, frozenAmount: Number(updatedUserAfter.frozenAmount || 0) });
+        res.json({ success: true, task });
     } catch (err) {
         console.error('start-task error:', err);
         res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
@@ -1151,10 +1259,9 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           const totalCommission = updatedProducts.reduce((sum, prod) => sum + Number(prod.commission || 0), 0);
 
           // Parallel updates: user balance and task status
-          // IMPORTANT: decrement frozenAmount by totalRefund (release the frozen money)
           const userUpdatePromise = User.updateOne(
             { _id: user._id },
-            { $inc: { balance: totalRefund + totalCommission, frozenAmount: -totalRefund, commission: totalCommission, commissionToday: totalCommission } }
+            { $inc: { balance: totalRefund + totalCommission, commission: totalCommission, commissionToday: totalCommission } }
           );
           const taskUpdatePromise = Task.updateOne(
             { _id: task._id },
@@ -1162,16 +1269,6 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           );
 
           await Promise.all([userUpdatePromise, taskUpdatePromise]);
-
-          // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
-          try {
-            const refreshed = await User.findById(user._id);
-            if (refreshed && refreshed.frozenAmount < 0) {
-              await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
-            }
-          } catch (e) {
-            // ignore
-          }
 
           // Fire-and-forget referral distribution
           (async () => {
@@ -1236,10 +1333,9 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
       const now = new Date().toISOString();
 
       // Parallel updates: user and task (fast)
-      // IMPORTANT: when refunding, decrement frozenAmount by the refunded price
       const userUpdatePromise = User.updateOne(
         { _id: user._id },
-        { $inc: { balance: price + commission, frozenAmount: -price, commission: commission, commissionToday: commission } }
+        { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
       );
 
       const taskUpdatePromise = Task.updateOne(
@@ -1248,16 +1344,6 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
       );
 
       await Promise.all([userUpdatePromise, taskUpdatePromise]);
-
-      // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
-      try {
-        const refreshed = await User.findById(user._id);
-        if (refreshed && refreshed.frozenAmount < 0) {
-          await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
-        }
-      } catch (e) {
-        // ignore
-      }
 
       // Fire-and-forget referral distribution (async) so we don't block the response
       (async () => {
