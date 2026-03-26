@@ -5,33 +5,62 @@
   <title>Geo Locations / Tracked Clicks — Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    /* Theme variables: dark by default, override when .light on <body> */
     :root {
-      --bg:#071226;
-      --panel:#0b1220;
-      --card:#07202b;
-      --muted:#9fb0c9;
-      --accent:#0f62ff;
-      --text:#e6eef8;
+      --bg-0: #071226;
+      --bg-1: #0b1220;
+      --panel: #071226;
+      --card: #07202b;
+      --muted: #9fb0c9;
+      --accent: #0f62ff;
+      --text: #e6eef8;
+      --danger: #e55353;
+      --row-alt: #071528;
+      --border: #0f2636;
+      --card-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      --header-bg: linear-gradient(90deg,#f8fafc,#ffffff);
     }
-    html,body { height:100%; margin:0; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:linear-gradient(180deg,#071226 0%, #04111a 100%); color:var(--text); }
-    .wrap { max-width:1200px; margin:18px auto; padding:18px; background:var(--panel); border-radius:8px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
-    h1 { margin:0 0 12px 0; color:#cfe3ff; font-size:20px;}
+
+    body.light {
+      --bg-0: #f4f6fb;
+      --bg-1: #ffffff;
+      --panel: #ffffff;
+      --card: #ffffff;
+      --muted: #475569;
+      --accent: #1565c0;
+      --text: #0b1724;
+      --danger: #b91c1c;
+      --row-alt: #f8fafc;
+      --border: #e6eef6;
+      --card-shadow: 0 6px 18px rgba(11,22,34,0.06);
+    }
+
+    html,body { height:100%; margin:0; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:var(--bg-0); color:var(--text); }
+    .wrap { max-width:1200px; margin:18px auto; padding:18px; background:var(--panel); border-radius:8px; box-shadow: var(--card-shadow); }
+    h1 { margin:0 0 12px 0; color:var(--text); font-size:20px;}
     .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
     input[type="text"], select, input[type="date"], input[type="number"] {
-      padding:8px 10px; border-radius:6px; border:1px solid #243449; background:#071226; color:var(--text); min-width:120px;
+      padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg-1); color:var(--text); min-width:120px;
     }
     button { background:var(--accent); color:#fff; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600; }
-    button.secondary { background:transparent; border:1px solid #243449; color:var(--text); }
+    button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+    button.ghost { background:transparent; color:var(--text); border:1px dashed var(--border); padding:6px 10px; }
     .results { margin-top:12px; }
     table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
-    th, td { padding:10px 8px; border-bottom:1px solid #0f2636; vertical-align:top; text-align:left; }
-    th { background:#061425; color:#9fc3ff; position: sticky; top:0; z-index:2; }
-    tr:nth-child(even) td { background:#071528; }
+    th, td { padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:top; text-align:left; }
+    th { background:var(--bg-1); color:var(--muted); position: sticky; top:0; z-index:2; }
+    tr:nth-child(even) td { background:var(--row-alt); }
     .small { font-size:12px; color:var(--muted); }
     .nowrap { white-space:nowrap; }
     .empty { padding:40px; text-align:center; color:var(--muted); }
-    a.map-link { color:#9fd1ff; text-decoration:underline; }
-    .pre { font-family: monospace; white-space:pre-wrap; color:#cfe3ff; font-size:12px; }
+    a.map-link { color:var(--accent); text-decoration:underline; }
+    .pre { font-family: monospace; white-space:pre-wrap; color:var(--text); font-size:12px; }
+    .controls-right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+    .danger { background:var(--danger); }
+    .checkbox-cell { width:38px; text-align:center; }
+    .action-btn { background:transparent; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px; cursor:pointer; }
+    .muted { color:var(--muted); }
+    .toolbar { display:flex; gap:8px; align-items:center; }
     @media (max-width:920px) {
       .controls { flex-direction:column; align-items:stretch; }
       input, select { min-width:unset; width:100%; }
@@ -39,7 +68,7 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap" id="wrap">
     <h1>Tracked Clicks / Login Audit</h1>
 
     <div class="controls">
@@ -57,12 +86,19 @@
 
       <input id="limit" type="number" min="1" max="1000" placeholder="Limit" value="200" style="width:110px" />
 
-      <button id="refresh">Refresh</button>
-      <button id="export" class="secondary">Export CSV</button>
+      <div class="controls-right toolbar">
+        <button id="refresh">Refresh</button>
+        <button id="export" class="secondary">Export CSV</button>
+        <button id="bulkDelete" class="danger" title="Delete selected entries">Delete Selected</button>
+        <div style="width:8px"></div>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="themeToggle" type="checkbox" /> Dark mode
+        </label>
+      </div>
 
-      <div style="flex:1"></div>
+      <div style="flex-basis:100%"></div>
 
-      <div class="small">Data comes directly from the loginaudit collection (server-side canonical records).</div>
+      <div class="small">Data comes directly from the loginaudit collection (server-side canonical records). Select rows to delete single or bulk entries.</div>
     </div>
 
     <div id="results" class="results">
@@ -71,7 +107,7 @@
   </div>
 
   <script>
-    // Same admin-token pattern used by your users page.
+    // Admin token (same approach used in users page)
     const ADMIN_TOKEN = localStorage.getItem('adminToken');
     if (!ADMIN_TOKEN) {
       alert('Access denied. Please login to the admin panel.');
@@ -80,13 +116,42 @@
 
     const resultsEl = document.getElementById('results');
     const usersDatalist = document.getElementById('usersList');
+    const refreshBtn = document.getElementById('refresh');
+    const exportBtn = document.getElementById('export');
+    const bulkDeleteBtn = document.getElementById('bulkDelete');
+    const themeToggle = document.getElementById('themeToggle');
 
+    // Track selected ids for bulk delete
+    let selectedIds = new Set();
+    let currentItems = [];
+
+    // Helper: set theme based on localStorage value or system
+    function initTheme() {
+      const prefer = localStorage.getItem('adminTheme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'dark');
+      applyTheme(prefer);
+      themeToggle.checked = (prefer === 'dark');
+      // Listen for user toggles (this toggle only controls this page)
+      themeToggle.addEventListener('change', () => {
+        const theme = themeToggle.checked ? 'dark' : 'light';
+        localStorage.setItem('adminTheme', theme);
+        applyTheme(theme);
+      });
+      // Sync across tabs
+      window.addEventListener('storage', (ev) => {
+        if (ev.key === 'adminTheme') applyTheme(ev.newValue || 'dark');
+      });
+    }
+    function applyTheme(theme) {
+      if (theme === 'light') document.body.classList.add('light');
+      else document.body.classList.remove('light');
+    }
+
+    // Populate users datalist (reuses /admin/users same as users page)
     async function fetchUsersForDatalist() {
       try {
         const res = await fetch('/admin/users', { headers: { 'x-admin-token': ADMIN_TOKEN } });
         if (!res.ok) return;
         const users = await res.json();
-        // /admin/users returns array of user objects (same as users page)
         if (Array.isArray(users)) {
           usersDatalist.innerHTML = '';
           users.forEach(u => {
@@ -95,11 +160,10 @@
             usersDatalist.appendChild(opt);
           });
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) { /* ignore */ }
     }
 
+    // Build query and fetch tracked clicks
     async function fetchData() {
       resultsEl.innerHTML = '<div class="empty">Loading…</div>';
       const username = document.getElementById('username').value.trim();
@@ -121,17 +185,19 @@
         });
         if (!res.ok) {
           const text = await res.text().catch(()=>res.statusText);
-          resultsEl.innerHTML = `<div class="empty">No data found or error: ${text || res.statusText}</div>`;
+          resultsEl.innerHTML = `<div class="empty">No data found or error: ${escapeHtml(text || res.statusText)}</div>`;
           return;
         }
         const j = await res.json();
         if (!j || !j.success || !Array.isArray(j.data)) {
-          resultsEl.innerHTML = `<div class="empty">No data found or error: ${j && j.message ? j.message : 'unexpected response'}</div>`;
+          resultsEl.innerHTML = `<div class="empty">No data found or error: ${j && j.message ? escapeHtml(j.message) : 'unexpected response'}</div>`;
           return;
         }
+        currentItems = j.data;
+        selectedIds.clear();
         renderTable(j.data);
       } catch (err) {
-        resultsEl.innerHTML = `<div class="empty">Request failed: ${String(err)}</div>`;
+        resultsEl.innerHTML = `<div class="empty">Request failed: ${escapeHtml(String(err))}</div>`;
       }
     }
 
@@ -142,26 +208,25 @@
       }
 
       const rows = items.map(it => {
+        const id = it._id || it.id || '';
+        const checked = selectedIds.has(String(id)) ? 'checked' : '';
         const geo = it.geo || {};
         const location = [geo.city, geo.regionName, geo.country].filter(Boolean).join(', ');
-        // prefer lat/lon from geo, otherwise attempt to use geo.query (ip)
         let mapLink = '';
         if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') {
           mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.lat + ',' + geo.lon)}`;
         } else if (geo && geo.query) {
-          // some records include query as string IP; ip-api returns lat/lon normally, but fallback:
           mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.query)}`;
         } else if (it.ip) {
           mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.ip)}`;
         }
 
-        const ua = it.userAgent || '';
-        const created = it.createdAt || '';
         return `
-          <tr>
+          <tr data-id="${escapeHtml(String(id))}">
+            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" data-id="${escapeHtml(String(id))}" ${checked} /></td>
             <td style="width:160px">
               <strong>${escapeHtml(it.event || '')}</strong>
-              <div class="small">${escapeHtml(created)}</div>
+              <div class="small">${escapeHtml(it.createdAt || '')}</div>
             </td>
             <td style="width:160px">
               <strong>${escapeHtml(it.username || '')}</strong>
@@ -174,7 +239,10 @@
             <td>
               ${escapeHtml(location)}<div class="small">${escapeHtml(geo.isp || '')}</div>
             </td>
-            <td style="width:320px" class="pre">${escapeHtml(ua)}</td>
+            <td style="width:320px" class="pre">${escapeHtml(it.userAgent || '')}</td>
+            <td style="width:120px" class="nowrap">
+              <button class="action-btn" data-action="delete" data-id="${escapeHtml(String(id))}">Delete</button>
+            </td>
           </tr>
         `;
       }).join('');
@@ -182,22 +250,114 @@
       resultsEl.innerHTML = `
         <table>
           <thead><tr>
+            <th class="checkbox-cell"><input id="selectAll" type="checkbox" /></th>
             <th style="width:160px">Event / Time</th>
             <th style="width:160px">User</th>
             <th style="width:140px">IP</th>
             <th>Location / ISP</th>
             <th style="width:320px">User Agent</th>
+            <th style="width:120px">Actions</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       `;
+
+      // Wire up row checkbox events
+      document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          if (e.target.checked) selectedIds.add(String(id));
+          else selectedIds.delete(String(id));
+          updateSelectAllCheckbox();
+        });
+      });
+
+      // Wire up delete buttons
+      document.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const id = e.target.dataset.id;
+          if (!id) return;
+          if (!confirm('Delete this tracked-click record?')) return;
+          await deleteSingle(String(id));
+        });
+      });
+
+      // SelectAll
+      document.getElementById('selectAll').checked = areAllVisibleSelected();
+      document.getElementById('selectAll').addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        document.querySelectorAll('.row-checkbox').forEach(cb => {
+          cb.checked = checked;
+          const id = cb.dataset.id;
+          if (checked) selectedIds.add(String(id));
+          else selectedIds.delete(String(id));
+        });
+      });
     }
 
-    function escapeHtml(s='') {
-      return String(s || '').replace(/[&<>"']/g, (m)=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    function areAllVisibleSelected() {
+      const ids = Array.from(document.querySelectorAll('.row-checkbox')).map(cb => cb.dataset.id);
+      if (!ids.length) return false;
+      return ids.every(id => selectedIds.has(String(id)));
     }
 
-    // Export CSV using fetch so we can include admin header
+    function updateSelectAllCheckbox() {
+      const selAll = document.getElementById('selectAll');
+      selAll.checked = areAllVisibleSelected();
+    }
+
+    // Delete single tracked-click by id. Calls server DELETE endpoint /admin/tracked-clicks/:id
+    async function deleteSingle(id) {
+      try {
+        const res = await fetch('/admin/tracked-clicks/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { 'x-admin-token': ADMIN_TOKEN }
+        });
+        const body = await res.json().catch(()=>({}));
+        if (!res.ok) {
+          alert('Delete failed: ' + (body.message || res.statusText));
+          return;
+        }
+        // remove from selectedIds and re-fetch or remove row DOM
+        selectedIds.delete(String(id));
+        // Remove row visually
+        const row = resultsEl.querySelector(`tr[data-id="${CSS.escape(String(id))}"]`);
+        if (row) row.remove();
+        showTemporaryMessage('Deleted 1 record');
+      } catch (err) {
+        alert('Delete failed: ' + String(err));
+      }
+    }
+
+    // Bulk delete selectedIds using POST /admin/tracked-clicks/bulk-delete with { ids: [] }
+    async function bulkDeleteSelected() {
+      if (!selectedIds.size) { alert('No entries selected'); return; }
+      if (!confirm(`Delete ${selectedIds.size} selected record(s)? This cannot be undone.`)) return;
+      const ids = Array.from(selectedIds);
+      try {
+        const res = await fetch('/admin/tracked-clicks/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
+          body: JSON.stringify({ ids })
+        });
+        const body = await res.json().catch(()=>({}));
+        if (!res.ok) {
+          alert('Bulk delete failed: ' + (body.message || res.statusText));
+          return;
+        }
+        // Remove rows visually
+        ids.forEach(id => {
+          const row = resultsEl.querySelector(`tr[data-id="${CSS.escape(String(id))}"]`);
+          if (row) row.remove();
+        });
+        selectedIds.clear();
+        showTemporaryMessage('Bulk delete completed');
+      } catch (err) {
+        alert('Bulk delete failed: ' + String(err));
+      }
+    }
+
+    // Export CSV (calls export endpoint which exists on server)
     async function exportCsv() {
       const username = document.getElementById('username').value.trim();
       const event = document.getElementById('event').value;
@@ -230,35 +390,42 @@
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+        showTemporaryMessage('Export ready');
       } catch (err) {
         showTemporaryMessage('Export failed: ' + String(err));
       }
     }
 
+    // Utility to show small message in results area
     function showTemporaryMessage(m) {
       const prev = resultsEl.querySelector('.empty');
       if (prev) prev.textContent = m;
       else resultsEl.innerHTML = `<div class="empty">${escapeHtml(m)}</div>`;
+      setTimeout(() => {
+        // clear message only if nothing else
+        if ((resultsEl.querySelectorAll('table').length === 0)) resultsEl.innerHTML = '<div class="empty">Press Refresh to load tracked clicks.</div>';
+      }, 2200);
     }
 
-    document.getElementById('refresh').addEventListener('click', fetchData);
-    document.getElementById('export').addEventListener('click', exportCsv);
+    function escapeHtml(s='') {
+      return String(s || '').replace(/[&<>"']/g, (m)=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
 
-    // auto-populate users datalist and auto-refresh a couple seconds after load
+    // Wire buttons
+    refreshBtn.addEventListener('click', fetchData);
+    exportBtn.addEventListener('click', exportCsv);
+    bulkDeleteBtn.addEventListener('click', bulkDeleteSelected);
+
+    // Init
     (async function init(){
+      initTheme();
       await fetchUsersForDatalist();
-      // If page opened from admin/users with a hash, support #user=USERNAME
-      try {
-        const hash = window.location.hash || '';
-        if (hash && hash.includes('user=')) {
-          const params = new URLSearchParams(hash.replace(/^#/, ''));
-          const u = params.get('user');
-          if (u) document.getElementById('username').value = decodeURIComponent(u);
-        }
-      } catch(e){}
       // initial fetch
-      setTimeout(fetchData, 200);
+      setTimeout(fetchData, 150);
     })();
+
+    // Expose deleteSingle for row event handlers (in case needed)
+    window.deleteTrackedClick = deleteSingle;
   </script>
 </body>
 </html>
