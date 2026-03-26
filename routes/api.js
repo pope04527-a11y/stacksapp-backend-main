@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const cloudinary = require('cloudinary').v2;
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const { distributeReferralCommission } = require('./commissionService');
 
@@ -700,6 +702,40 @@ router.get('/settings', async (req, res) => {
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
+});
+
+// -------- NEW PUBLIC SERVICE-LINKS ROUTE --------
+// Returns the serviceLinks map stored in Settings.serviceLinks (if present).
+// Fallback: read public/service-links.json file if DB document does not have serviceLinks.
+// This route is intentionally public so frontends can fetch current links without admin credentials.
+router.get('/service-links', async (req, res) => {
+  try {
+    let settingsDoc = null;
+    try {
+      settingsDoc = await Setting.findOne({}).lean();
+    } catch (e) {
+      // proceed to fallback
+      settingsDoc = null;
+    }
+
+    if (settingsDoc && settingsDoc.serviceLinks && typeof settingsDoc.serviceLinks === 'object') {
+      return res.json({ success: true, source: 'db', data: settingsDoc.serviceLinks });
+    }
+
+    // fallback to public file (public/service-links.json)
+    try {
+      const filePath = path.join(__dirname, '..', 'public', 'service-links.json');
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      return res.json({ success: true, source: 'file', data: parsed });
+    } catch (fileErr) {
+      // If not found return an empty object (so clients don't crash)
+      return res.json({ success: true, source: 'none', data: {} });
+    }
+  } catch (err) {
+    console.error('GET /service-links error:', err && err.message ? err.message : err);
+    return res.status(500).json({ success: false, message: 'Failed to read service links' });
+  }
 });
 
 // Registration
