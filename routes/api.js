@@ -702,41 +702,49 @@ router.get('/settings', async (req, res) => {
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
-});
+}));
 
 // -------- NEW PUBLIC SERVICE-LINKS ROUTE --------
 // Returns the serviceLinks map stored in Settings.serviceLinks (if present).
 // Fallback: read public/service-links.json file if DB document does not have serviceLinks.
-// This route is intentionally public so frontends can fetch current links without admin credentials.
-router.get('/service-links', async (req, res) => {
+// Sets CORS headers to allow requests from the frontend origin.
+router.get('/service-links', asyncHandler(async (req, res) => {
   try {
+    const FRONTEND_ORIGIN = 'https://keymusecommerce.com';
+    // Attempt to read from DB
     let settingsDoc = null;
     try {
       settingsDoc = await Setting.findOne({}).lean();
     } catch (e) {
-      // proceed to fallback
       settingsDoc = null;
     }
 
     if (settingsDoc && settingsDoc.serviceLinks && typeof settingsDoc.serviceLinks === 'object') {
+      res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
       return res.json({ success: true, source: 'db', data: settingsDoc.serviceLinks });
     }
 
-    // fallback to public file (public/service-links.json)
+    // Fallback to public file (public/service-links.json)
     try {
       const filePath = path.join(__dirname, '..', 'public', 'service-links.json');
       const raw = fs.readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(raw);
+      res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
       return res.json({ success: true, source: 'file', data: parsed });
     } catch (fileErr) {
-      // If not found return an empty object (so clients don't crash)
-      return res.json({ success: true, source: 'none', data: {} });
+      res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      return res.status(404).json({ success: false, message: 'No service links found' });
     }
   } catch (err) {
     console.error('GET /service-links error:', err && err.message ? err.message : err);
+    res.setHeader('Access-Control-Allow-Origin', 'https://keymusecommerce.com');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     return res.status(500).json({ success: false, message: 'Failed to read service links' });
   }
-});
+}));
 
 // Registration
 router.post('/users/register', async (req, res) => {
