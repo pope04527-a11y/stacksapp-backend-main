@@ -2,24 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Tracked Clicks — Admin</title>
+  <title>Geo Locations / Tracked Clicks — Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: "Segoe UI", Roboto, Arial, sans-serif; margin:0; background:#0f1720; color:#e6eef8; }
-    .wrap { max-width:1200px; margin:20px auto; padding:18px; background:#0b1220; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.6); }
-    h1{ margin:0 0 12px 0; font-size:20px; color:#cfe3ff;}
-    .controls { display:flex; gap:8px; margin-bottom:12px; align-items:center; }
-    input[type="text"], input[type="date"], select { padding:8px 10px; border-radius:6px; border:1px solid #243449; background:#071226; color:#dbeafe; min-width:140px; }
-    button { background:#0f62ff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600; }
-    button.secondary { background:#2b3440; color:#cfe3ff; border:1px solid #243449; }
-    table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
-    th, td { padding:10px 8px; border-bottom:1px solid #172033; text-align:left; vertical-align:top; }
-    th { background:#071229; color:#9fc3ff; font-weight:700; position:sticky; top:0; }
+    :root {
+      --bg:#071226;
+      --panel:#0b1220;
+      --card:#07202b;
+      --muted:#9fb0c9;
+      --accent:#0f62ff;
+      --text:#e6eef8;
+    }
+    html,body { height:100%; margin:0; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:linear-gradient(180deg,#071226 0%, #04111a 100%); color:var(--text); }
+    .wrap { max-width:1200px; margin:18px auto; padding:18px; background:var(--panel); border-radius:8px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+    h1 { margin:0 0 12px 0; color:#cfe3ff; font-size:20px;}
+    .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+    input[type="text"], select, input[type="date"], input[type="number"] {
+      padding:8px 10px; border-radius:6px; border:1px solid #243449; background:#071226; color:var(--text); min-width:120px;
+    }
+    button { background:var(--accent); color:#fff; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600; }
+    button.secondary { background:transparent; border:1px solid #243449; color:var(--text); }
+    .results { margin-top:12px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+    th, td { padding:10px 8px; border-bottom:1px solid #0f2636; vertical-align:top; text-align:left; }
+    th { background:#061425; color:#9fc3ff; position: sticky; top:0; z-index:2; }
     tr:nth-child(even) td { background:#071528; }
-    .small { font-size:12px; color:#9fb0c9; }
+    .small { font-size:12px; color:var(--muted); }
     .nowrap { white-space:nowrap; }
-    .pre { white-space:pre-wrap; font-family:monospace; color:#cfe3ff; }
-    .empty { padding:40px; text-align:center; color:#94a7bf; }
+    .empty { padding:40px; text-align:center; color:var(--muted); }
+    a.map-link { color:#9fd1ff; text-decoration:underline; }
+    .pre { font-family: monospace; white-space:pre-wrap; color:#cfe3ff; font-size:12px; }
+    @media (max-width:920px) {
+      .controls { flex-direction:column; align-items:stretch; }
+      input, select { min-width:unset; width:100%; }
+    }
   </style>
 </head>
 <body>
@@ -27,133 +43,221 @@
     <h1>Tracked Clicks / Login Audit</h1>
 
     <div class="controls">
-      <input id="username" type="text" placeholder="Filter by username" />
+      <input id="username" list="usersList" type="text" placeholder="Filter by username (leave empty for all)" style="min-width:180px" />
+      <datalist id="usersList"></datalist>
+
       <select id="event">
         <option value="">All events</option>
         <option value="login">login</option>
         <option value="register">register</option>
       </select>
-      <input id="from" type="date" />
-      <input id="to" type="date" />
-      <input id="limit" type="text" placeholder="Limit (200)" style="width:110px" />
+
+      <input id="from" type="date" placeholder="from" />
+      <input id="to" type="date" placeholder="to" />
+
+      <input id="limit" type="number" min="1" max="1000" placeholder="Limit" value="200" style="width:110px" />
+
       <button id="refresh">Refresh</button>
       <button id="export" class="secondary">Export CSV</button>
+
       <div style="flex:1"></div>
-      <div class="small">Tip: Click Refresh to pull latest entries.</div>
+
+      <div class="small">Data comes directly from the loginaudit collection (server-side canonical records).</div>
     </div>
 
-    <div id="results">
+    <div id="results" class="results">
       <div class="empty">Press Refresh to load tracked clicks.</div>
     </div>
   </div>
 
   <script>
-    (function(){
-      const results = document.getElementById('results');
-      const refreshBtn = document.getElementById('refresh');
-      const exportBtn = document.getElementById('export');
+    // Same admin-token pattern used by your users page.
+    const ADMIN_TOKEN = localStorage.getItem('adminToken');
+    if (!ADMIN_TOKEN) {
+      alert('Access denied. Please login to the admin panel.');
+      location.href = '/admin-panel/login.html';
+    }
 
-      function isoDateForInput(d){
-        if(!d) return '';
-        const dt = new Date(d);
-        if (isNaN(dt)) return '';
-        const y = dt.getFullYear();
-        const m = String(dt.getMonth()+1).padStart(2,'0');
-        const day = String(dt.getDate()).padStart(2,'0');
-        return `${y}-${m}-${day}`;
-      }
+    const resultsEl = document.getElementById('results');
+    const usersDatalist = document.getElementById('usersList');
 
-      async function fetchData(){
-        results.innerHTML = '<div class="empty">Loading…</div>';
-        const username = document.getElementById('username').value.trim();
-        const event = document.getElementById('event').value;
-        const from = document.getElementById('from').value;
-        const to = document.getElementById('to').value;
-        const limit = document.getElementById('limit').value || 200;
-        const qs = new URLSearchParams();
-        if(username) qs.set('username', username);
-        if(event) qs.set('event', event);
-        if(from) qs.set('from', from);
-        if(to) qs.set('to', to);
-        if(limit) qs.set('limit', limit);
-
-        try {
-          const resp = await fetch('/admin/tracked-clicks?' + qs.toString(), { credentials: 'same-origin' });
-          const j = await resp.json();
-          if(!j || !j.success || !Array.isArray(j.data)) {
-            results.innerHTML = '<div class="empty">No data found or error: ' + (j && j.message ? j.message : 'unexpected response') + '</div>';
-            return;
-          }
-          renderTable(j.data);
-        } catch (err) {
-          results.innerHTML = '<div class="empty">Request failed: ' + String(err) + '</div>';
+    async function fetchUsersForDatalist() {
+      try {
+        const res = await fetch('/admin/users', { headers: { 'x-admin-token': ADMIN_TOKEN } });
+        if (!res.ok) return;
+        const users = await res.json();
+        // /admin/users returns array of user objects (same as users page)
+        if (Array.isArray(users)) {
+          usersDatalist.innerHTML = '';
+          users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.username || '';
+            usersDatalist.appendChild(opt);
+          });
         }
+      } catch (e) {
+        // ignore
       }
+    }
 
-      function short(v, len=36){
-        if(!v) return '';
-        v = String(v);
-        return v.length > len ? v.slice(0,len-1) + '…' : v;
-      }
+    async function fetchData() {
+      resultsEl.innerHTML = '<div class="empty">Loading…</div>';
+      const username = document.getElementById('username').value.trim();
+      const event = document.getElementById('event').value;
+      const from = document.getElementById('from').value;
+      const to = document.getElementById('to').value;
+      const limit = Number(document.getElementById('limit').value) || 200;
 
-      function renderTable(items){
-        if(!items.length){
-          results.innerHTML = '<div class="empty">No entries found</div>';
+      const qs = new URLSearchParams();
+      if (username) qs.set('username', username);
+      if (event) qs.set('event', event);
+      if (from) qs.set('from', from);
+      if (to) qs.set('to', to);
+      if (limit) qs.set('limit', String(limit));
+
+      try {
+        const res = await fetch('/admin/tracked-clicks?' + qs.toString(), {
+          headers: { 'x-admin-token': ADMIN_TOKEN }
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(()=>res.statusText);
+          resultsEl.innerHTML = `<div class="empty">No data found or error: ${text || res.statusText}</div>`;
           return;
         }
-        const rows = items.map(it => {
-          const geo = it.geo || {};
-          const location = [geo.city, geo.regionName, geo.country].filter(Boolean).join(', ');
-          const mapLink = (geo && geo.lat && geo.lon) ? ('<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(geo.lat+','+geo.lon)+'" target="_blank">map</a>') : '';
-          return `
-            <tr>
-              <td class="nowrap"><strong>${it.event || ''}</strong><div class="small">${it.createdAt || ''}</div></td>
-              <td><strong>${it.username || ''}</strong><div class="small">id: ${it.userId || ''}</div></td>
-              <td class="nowrap">${it.ip || ''} ${mapLink}</td>
-              <td>${escapeHtml(location)}<div class="small">${escapeHtml(geo.isp || '')}</div></td>
-              <td class="pre">${escapeHtml(it.userAgent || '')}</td>
-            </tr>
-          `;
-        }).join('');
-        results.innerHTML = `
-          <table>
-            <thead><tr>
-              <th style="width:160px">Event / Time</th>
-              <th style="width:160px">User</th>
-              <th style="width:140px">IP</th>
-              <th>Location / ISP</th>
-              <th style="width:320px">User Agent</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
+        const j = await res.json();
+        if (!j || !j.success || !Array.isArray(j.data)) {
+          resultsEl.innerHTML = `<div class="empty">No data found or error: ${j && j.message ? j.message : 'unexpected response'}</div>`;
+          return;
+        }
+        renderTable(j.data);
+      } catch (err) {
+        resultsEl.innerHTML = `<div class="empty">Request failed: ${String(err)}</div>`;
+      }
+    }
+
+    function renderTable(items) {
+      if (!items.length) {
+        resultsEl.innerHTML = '<div class="empty">No entries found</div>';
+        return;
+      }
+
+      const rows = items.map(it => {
+        const geo = it.geo || {};
+        const location = [geo.city, geo.regionName, geo.country].filter(Boolean).join(', ');
+        // prefer lat/lon from geo, otherwise attempt to use geo.query (ip)
+        let mapLink = '';
+        if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') {
+          mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.lat + ',' + geo.lon)}`;
+        } else if (geo && geo.query) {
+          // some records include query as string IP; ip-api returns lat/lon normally, but fallback:
+          mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.query)}`;
+        } else if (it.ip) {
+          mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.ip)}`;
+        }
+
+        const ua = it.userAgent || '';
+        const created = it.createdAt || '';
+        return `
+          <tr>
+            <td style="width:160px">
+              <strong>${escapeHtml(it.event || '')}</strong>
+              <div class="small">${escapeHtml(created)}</div>
+            </td>
+            <td style="width:160px">
+              <strong>${escapeHtml(it.username || '')}</strong>
+              <div class="small">id: ${escapeHtml(it.userId || '')}</div>
+            </td>
+            <td class="nowrap" style="width:140px">
+              ${escapeHtml(it.ip || '')}
+              ${mapLink ? `<div><a class="map-link" href="${mapLink}" target="_blank">map</a></div>` : ''}
+            </td>
+            <td>
+              ${escapeHtml(location)}<div class="small">${escapeHtml(geo.isp || '')}</div>
+            </td>
+            <td style="width:320px" class="pre">${escapeHtml(ua)}</td>
+          </tr>
         `;
-      }
+      }).join('');
 
-      function escapeHtml(s){
-        if(!s) return '';
-        return String(s).replace(/[&<>"]/g, function(c){
-          return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];
+      resultsEl.innerHTML = `
+        <table>
+          <thead><tr>
+            <th style="width:160px">Event / Time</th>
+            <th style="width:160px">User</th>
+            <th style="width:140px">IP</th>
+            <th>Location / ISP</th>
+            <th style="width:320px">User Agent</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function escapeHtml(s='') {
+      return String(s || '').replace(/[&<>"']/g, (m)=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
+
+    // Export CSV using fetch so we can include admin header
+    async function exportCsv() {
+      const username = document.getElementById('username').value.trim();
+      const event = document.getElementById('event').value;
+      const from = document.getElementById('from').value;
+      const to = document.getElementById('to').value;
+      const limit = Number(document.getElementById('limit').value) || 1000;
+
+      const qs = new URLSearchParams();
+      if (username) qs.set('username', username);
+      if (event) qs.set('event', event);
+      if (from) qs.set('from', from);
+      if (to) qs.set('to', to);
+      if (limit) qs.set('limit', String(limit));
+
+      try {
+        const res = await fetch('/admin/tracked-clicks/export?' + qs.toString(), {
+          headers: { 'x-admin-token': ADMIN_TOKEN }
         });
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>res.statusText);
+          showTemporaryMessage('Export failed: ' + txt);
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'tracked_clicks.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        showTemporaryMessage('Export failed: ' + String(err));
       }
+    }
 
-      refreshBtn.addEventListener('click', fetchData);
-      exportBtn.addEventListener('click', function(){
-        const username = document.getElementById('username').value.trim();
-        const event = document.getElementById('event').value;
-        const from = document.getElementById('from').value;
-        const to = document.getElementById('to').value;
-        const limit = document.getElementById('limit').value || 1000;
-        const qs = new URLSearchParams();
-        if(username) qs.set('username', username);
-        if(event) qs.set('event', event);
-        if(from) qs.set('from', from);
-        if(to) qs.set('to', to);
-        if(limit) qs.set('limit', limit);
-        window.location = '/admin/tracked-clicks/export?' + qs.toString();
-      });
+    function showTemporaryMessage(m) {
+      const prev = resultsEl.querySelector('.empty');
+      if (prev) prev.textContent = m;
+      else resultsEl.innerHTML = `<div class="empty">${escapeHtml(m)}</div>`;
+    }
 
-      // Auto-refresh on load
-      document.addEventListener('DOMContentLoaded', function(){ fetchData(); });
+    document.getElementById('refresh').addEventListener('click', fetchData);
+    document.getElementById('export').addEventListener('click', exportCsv);
+
+    // auto-populate users datalist and auto-refresh a couple seconds after load
+    (async function init(){
+      await fetchUsersForDatalist();
+      // If page opened from admin/users with a hash, support #user=USERNAME
+      try {
+        const hash = window.location.hash || '';
+        if (hash && hash.includes('user=')) {
+          const params = new URLSearchParams(hash.replace(/^#/, ''));
+          const u = params.get('user');
+          if (u) document.getElementById('username').value = decodeURIComponent(u);
+        }
+      } catch(e){}
+      // initial fetch
+      setTimeout(fetchData, 200);
     })();
   </script>
 </body>
