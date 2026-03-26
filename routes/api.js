@@ -39,7 +39,10 @@ const userSchema = new mongoose.Schema({
   signState: { type: mongoose.Schema.Types.Mixed, default: { signedCount: 0, lastSignDate: null } },
 
   // Manual reset flag: user requests reset for next set (must be processed by admin or via explicit endpoint)
-  resetRequested: { type: Boolean, default: false }
+  resetRequested: { type: Boolean, default: false },
+
+  // Persisted frozen amount so frontend can show deducted amount across refreshes.
+  frozenAmount: { type: Number, default: 0 }
 }, { collection: 'users', strict: false });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -52,6 +55,19 @@ const Notification = mongoose.models.Notification || mongoose.model('Notificatio
 const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', new mongoose.Schema({}, { collection: 'transactions', strict: false }));
 const LinkClick = mongoose.models.LinkClick || mongoose.model('LinkClick', new mongoose.Schema({}, { collection: 'linkclicks', strict: false }));
 const Setting = mongoose.models.Setting || mongoose.model('Setting', new mongoose.Schema({}, { collection: 'settings', strict: false }));
+
+// New: LoginAudit model for persistent audit of register/login events
+const LoginAudit = mongoose.models.LoginAudit || mongoose.model('LoginAudit',
+  new mongoose.Schema({
+    userId: String,
+    username: String,
+    event: String, // 'login' | 'register' | other
+    ip: String,
+    geo: mongoose.Schema.Types.Mixed,
+    userAgent: String,
+    createdAt: { type: String, default: () => new Date().toISOString() }
+  }, { collection: 'loginaudit', strict: false })
+);
 
 // --- Session model to support multiple concurrent logins per user (one session per device/login) ---
 const sessionSchema = new mongoose.Schema({
@@ -135,8 +151,14 @@ async function notifyAdmin({ event = "unknown", user = {}, req = null, extra = {
     const usernameLine = `username: ${user.username || user.user || user.name || ""}`;
     const userIdLine = `userId: ${user._id || user.id || ""}`;
 
+    const ua = req ? (req.headers['user-agent'] || '') : (extra.userAgent || '');
+    let mapsLink = "";
+    if (geo && geo.lat && geo.lon) {
+      mapsLink = `\nMap: https://www.google.com/maps/search/?api=1&query=${geo.lat},${geo.lon}`;
+    }
+
     const eventLine = `<b>${event.toUpperCase()}</b>`;
-    const message = `${eventLine}\n${usernameLine}\n${userIdLine}\nIP: <code>${ip}</code>\nLocation: ${locationText}\nTime: ${time}`;
+    const message = `${eventLine}\n${usernameLine}\n${userIdLine}\nIP: <code>${ip}</code>\nLocation: ${locationText}${mapsLink}\nUser-Agent: ${ua}\nTime: ${time}`;
 
     // Telegram
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
@@ -726,7 +748,8 @@ router.post('/users/register', async (req, res) => {
         suspended: false,
         token: crypto.randomBytes(24).toString('hex'),
         createdAt: new Date().toISOString(),
-        currentSet: 1
+        currentSet: 1,
+        frozenAmount: 0
     };
 
     // Ensure _id is provided because the schema declares _id: String (Mongoose won't auto-generate a string _id)
@@ -739,6 +762,25 @@ router.post('/users/register', async (req, res) => {
         try {
           await notifyAdmin({ event: "user_registered", user: { username: created.username, _id: created._id }, req });
         } catch (e) { /* ignore notify errors */ }
+      })();
+
+      // Persist audit record (fire-and-forget)
+      (async () => {
+        try {
+          const ip = getClientIp(req);
+          const geo = await getGeoForIp(ip);
+          await LoginAudit.create({
+            userId: created._id,
+            username: created.username,
+            event: 'register',
+            ip,
+            geo,
+            userAgent: req.headers['user-agent'] || '',
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn('LoginAudit create failed (register):', e && e.message ? e.message : e);
+        }
       })();
 
       return res.json({ success: true, user: created });
@@ -756,6 +798,25 @@ router.post('/users/register', async (req, res) => {
             try {
               await notifyAdmin({ event: "user_registered", user: { username: created2.username, _id: created2._id }, req });
             } catch (e) { /* ignore notify errors */ }
+          })();
+
+          // Persist audit record for retry branch
+          (async () => {
+            try {
+              const ip = getClientIp(req);
+              const geo = await getGeoForIp(ip);
+              await LoginAudit.create({
+                userId: created2._id,
+                username: created2.username,
+                event: 'register',
+                ip,
+                geo,
+                userAgent: req.headers['user-agent'] || '',
+                createdAt: new Date().toISOString()
+              });
+            } catch (e) {
+              console.warn('LoginAudit create failed (register retry):', e && e.message ? e.message : e);
+            }
           })();
 
           return res.json({ success: true, user: created2 });
@@ -807,6 +868,26 @@ router.post('/login', async (req, res) => {
       try {
         await notifyAdmin({ event: "user_logged_in", user: { username: user.username, _id: user._id }, req });
       } catch (e) { /* ignore notify errors */ }
+    })();
+
+    // Persist audit record for login (fire-and-forget)
+    (async () => {
+      try {
+        const ipAddr = sessionDoc.ip || getClientIp(req);
+        const ua = sessionDoc.userAgent || req.headers['user-agent'] || '';
+        const geo = await getGeoForIp(ipAddr);
+        await LoginAudit.create({
+          userId: user._id,
+          username: user.username,
+          event: 'login',
+          ip: ipAddr,
+          geo,
+          userAgent: ua,
+          createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn('LoginAudit create failed (login):', e && e.message ? e.message : e);
+      }
     })();
 
     // pre-warm product cache (non-blocking)
@@ -903,7 +984,8 @@ router.get('/user-profile', verifyUserToken, async (req, res) => {
             registeredWorkingDays: regMap,
             registeredSetsToday,
             signState: dbUser.signState || { signedCount: 0, lastSignDate: null },
-            resetRequested: !!dbUser.resetRequested
+            resetRequested: !!dbUser.resetRequested,
+            frozenAmount: Number(dbUser.frozenAmount || 0)
         }
     });
 });
@@ -1130,9 +1212,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
               return res.status(400).json({ success: false, message: `Combo total (${comboTotal.toFixed(2)} GBP) does not meet the minimum starting-capital rule (${minAllowedPrice.toFixed(2)} GBP).` });
             }
 
+            // Deduct balance and increment user's frozenAmount atomically
             await User.updateOne(
                 { _id: user._id },
-                { $inc: { balance: -comboTotal } }
+                { $inc: { balance: -comboTotal, frozenAmount: comboTotal } }
             );
 
             const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1190,9 +1273,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
         }
         const commission = Math.floor(chosenProduct.price * vipInfo.commissionRate * 100) / 100;
 
+        // Deduct balance and increment user's frozenAmount atomically
         await User.updateOne(
             { _id: user._id },
-            { $inc: { balance: -chosenProduct.price } }
+            { $inc: { balance: -chosenProduct.price, frozenAmount: chosenProduct.price } }
         );
 
         const taskCode = crypto.randomBytes(10).toString('hex');
@@ -1217,7 +1301,10 @@ router.post('/start-task', verifyUserToken, checkPlatformStatus, async (req, res
 
         await Task.create(task);
 
-        res.json({ success: true, task });
+        // Return current balance and frozenAmount for client convenience
+        const updatedUserAfter = await User.findById(user._id);
+
+        res.json({ success: true, task, currentBalance: updatedUserAfter.balance, frozenAmount: Number(updatedUserAfter.frozenAmount || 0) });
     } catch (err) {
         console.error('start-task error:', err);
         res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
@@ -1259,9 +1346,10 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           const totalCommission = updatedProducts.reduce((sum, prod) => sum + Number(prod.commission || 0), 0);
 
           // Parallel updates: user balance and task status
+          // IMPORTANT: decrement frozenAmount by totalRefund (release the frozen money)
           const userUpdatePromise = User.updateOne(
             { _id: user._id },
-            { $inc: { balance: totalRefund + totalCommission, commission: totalCommission, commissionToday: totalCommission } }
+            { $inc: { balance: totalRefund + totalCommission, frozenAmount: -totalRefund, commission: totalCommission, commissionToday: totalCommission } }
           );
           const taskUpdatePromise = Task.updateOne(
             { _id: task._id },
@@ -1269,6 +1357,16 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
           );
 
           await Promise.all([userUpdatePromise, taskUpdatePromise]);
+
+          // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
+          try {
+            const refreshed = await User.findById(user._id);
+            if (refreshed && refreshed.frozenAmount < 0) {
+              await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
+            }
+          } catch (e) {
+            // ignore
+          }
 
           // Fire-and-forget referral distribution
           (async () => {
@@ -1333,9 +1431,10 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
       const now = new Date().toISOString();
 
       // Parallel updates: user and task (fast)
+      // IMPORTANT: when refunding, decrement frozenAmount by the refunded price
       const userUpdatePromise = User.updateOne(
         { _id: user._id },
-        { $inc: { balance: price + commission, commission: commission, commissionToday: commission } }
+        { $inc: { balance: price + commission, frozenAmount: -price, commission: commission, commissionToday: commission } }
       );
 
       const taskUpdatePromise = Task.updateOne(
@@ -1344,6 +1443,16 @@ router.post('/submit-task', verifyUserToken, checkPlatformStatus, async (req, re
       );
 
       await Promise.all([userUpdatePromise, taskUpdatePromise]);
+
+      // Ensure frozenAmount isn't negative due to any race (best-effort clamp)
+      try {
+        const refreshed = await User.findById(user._id);
+        if (refreshed && refreshed.frozenAmount < 0) {
+          await User.updateOne({ _id: user._id }, { $set: { frozenAmount: 0 } });
+        }
+      } catch (e) {
+        // ignore
+      }
 
       // Fire-and-forget referral distribution (async) so we don't block the response
       (async () => {
