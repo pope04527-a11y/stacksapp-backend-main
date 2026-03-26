@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tracked Clicks — Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: "Segoe UI", Roboto, Arial, sans-serif; margin:0; background:#0f1720; color:#e6eef8; }
+    .wrap { max-width:1200px; margin:20px auto; padding:18px; background:#0b1220; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.6); }
+    h1{ margin:0 0 12px 0; font-size:20px; color:#cfe3ff;}
+    .controls { display:flex; gap:8px; margin-bottom:12px; align-items:center; }
+    input[type="text"], input[type="date"], select { padding:8px 10px; border-radius:6px; border:1px solid #243449; background:#071226; color:#dbeafe; min-width:140px; }
+    button { background:#0f62ff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600; }
+    button.secondary { background:#2b3440; color:#cfe3ff; border:1px solid #243449; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+    th, td { padding:10px 8px; border-bottom:1px solid #172033; text-align:left; vertical-align:top; }
+    th { background:#071229; color:#9fc3ff; font-weight:700; position:sticky; top:0; }
+    tr:nth-child(even) td { background:#071528; }
+    .small { font-size:12px; color:#9fb0c9; }
+    .nowrap { white-space:nowrap; }
+    .pre { white-space:pre-wrap; font-family:monospace; color:#cfe3ff; }
+    .empty { padding:40px; text-align:center; color:#94a7bf; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Tracked Clicks / Login Audit</h1>
+
+    <div class="controls">
+      <input id="username" type="text" placeholder="Filter by username" />
+      <select id="event">
+        <option value="">All events</option>
+        <option value="login">login</option>
+        <option value="register">register</option>
+      </select>
+      <input id="from" type="date" />
+      <input id="to" type="date" />
+      <input id="limit" type="text" placeholder="Limit (200)" style="width:110px" />
+      <button id="refresh">Refresh</button>
+      <button id="export" class="secondary">Export CSV</button>
+      <div style="flex:1"></div>
+      <div class="small">Tip: Click Refresh to pull latest entries.</div>
+    </div>
+
+    <div id="results">
+      <div class="empty">Press Refresh to load tracked clicks.</div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const results = document.getElementById('results');
+      const refreshBtn = document.getElementById('refresh');
+      const exportBtn = document.getElementById('export');
+
+      function isoDateForInput(d){
+        if(!d) return '';
+        const dt = new Date(d);
+        if (isNaN(dt)) return '';
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth()+1).padStart(2,'0');
+        const day = String(dt.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      }
+
+      async function fetchData(){
+        results.innerHTML = '<div class="empty">Loading…</div>';
+        const username = document.getElementById('username').value.trim();
+        const event = document.getElementById('event').value;
+        const from = document.getElementById('from').value;
+        const to = document.getElementById('to').value;
+        const limit = document.getElementById('limit').value || 200;
+        const qs = new URLSearchParams();
+        if(username) qs.set('username', username);
+        if(event) qs.set('event', event);
+        if(from) qs.set('from', from);
+        if(to) qs.set('to', to);
+        if(limit) qs.set('limit', limit);
+
+        try {
+          const resp = await fetch('/admin/tracked-clicks?' + qs.toString(), { credentials: 'same-origin' });
+          const j = await resp.json();
+          if(!j || !j.success || !Array.isArray(j.data)) {
+            results.innerHTML = '<div class="empty">No data found or error: ' + (j && j.message ? j.message : 'unexpected response') + '</div>';
+            return;
+          }
+          renderTable(j.data);
+        } catch (err) {
+          results.innerHTML = '<div class="empty">Request failed: ' + String(err) + '</div>';
+        }
+      }
+
+      function short(v, len=36){
+        if(!v) return '';
+        v = String(v);
+        return v.length > len ? v.slice(0,len-1) + '…' : v;
+      }
+
+      function renderTable(items){
+        if(!items.length){
+          results.innerHTML = '<div class="empty">No entries found</div>';
+          return;
+        }
+        const rows = items.map(it => {
+          const geo = it.geo || {};
+          const location = [geo.city, geo.regionName, geo.country].filter(Boolean).join(', ');
+          const mapLink = (geo && geo.lat && geo.lon) ? ('<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(geo.lat+','+geo.lon)+'" target="_blank">map</a>') : '';
+          return `
+            <tr>
+              <td class="nowrap"><strong>${it.event || ''}</strong><div class="small">${it.createdAt || ''}</div></td>
+              <td><strong>${it.username || ''}</strong><div class="small">id: ${it.userId || ''}</div></td>
+              <td class="nowrap">${it.ip || ''} ${mapLink}</td>
+              <td>${escapeHtml(location)}<div class="small">${escapeHtml(geo.isp || '')}</div></td>
+              <td class="pre">${escapeHtml(it.userAgent || '')}</td>
+            </tr>
+          `;
+        }).join('');
+        results.innerHTML = `
+          <table>
+            <thead><tr>
+              <th style="width:160px">Event / Time</th>
+              <th style="width:160px">User</th>
+              <th style="width:140px">IP</th>
+              <th>Location / ISP</th>
+              <th style="width:320px">User Agent</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      function escapeHtml(s){
+        if(!s) return '';
+        return String(s).replace(/[&<>"]/g, function(c){
+          return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];
+        });
+      }
+
+      refreshBtn.addEventListener('click', fetchData);
+      exportBtn.addEventListener('click', function(){
+        const username = document.getElementById('username').value.trim();
+        const event = document.getElementById('event').value;
+        const from = document.getElementById('from').value;
+        const to = document.getElementById('to').value;
+        const limit = document.getElementById('limit').value || 1000;
+        const qs = new URLSearchParams();
+        if(username) qs.set('username', username);
+        if(event) qs.set('event', event);
+        if(from) qs.set('from', from);
+        if(to) qs.set('to', to);
+        if(limit) qs.set('limit', limit);
+        window.location = '/admin/tracked-clicks/export?' + qs.toString();
+      });
+
+      // Auto-refresh on load
+      document.addEventListener('DOMContentLoaded', function(){ fetchData(); });
+    })();
+  </script>
+</body>
+</html>
