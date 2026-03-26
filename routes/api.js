@@ -97,26 +97,37 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 
-// Robust extraction of client IP from request (x-forwarded-for, req.ip, connection, socket)
+// Normalize IP helpers (handles ::ffff: IPv4 mapped addresses)
+function normalizeIp(ip) {
+  if (!ip) return "";
+  const s = String(ip).trim();
+  // match IPv4 inside IPv6 mapped (::ffff:1.2.3.4)
+  const m = s.match(/(?:.*:)?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$/);
+  return m ? m[1] : s;
+}
+
+// Robust extraction of client IP from request (x-forwarded-for, x-real-ip, req.ip, connection, socket)
 function getClientIp(req) {
   try {
     const xf = req.headers['x-forwarded-for'] || req.headers['X-Forwarded-For'];
     if (xf && typeof xf === 'string') {
       const parts = xf.split(',').map(s => s.trim()).filter(Boolean);
-      if (parts.length) return parts[0];
+      if (parts.length) return normalizeIp(parts[0]);
     }
-    if (req.ip) return req.ip;
-    if (req.connection && req.connection.remoteAddress) return req.connection.remoteAddress;
-    if (req.socket && req.socket.remoteAddress) return req.socket.remoteAddress;
-    return "unknown";
+    const xr = req.headers['x-real-ip'] || req.headers['X-Real-Ip'];
+    if (xr) return normalizeIp(xr);
+    if (req.ip) return normalizeIp(req.ip);
+    if (req.connection && req.connection.remoteAddress) return normalizeIp(req.connection.remoteAddress);
+    if (req.socket && req.socket.remoteAddress) return normalizeIp(req.socket.remoteAddress);
+    return "";
   } catch (e) {
-    return "unknown";
+    return "";
   }
 }
 
 // Best-effort geo lookup using ip-api.com (free service, rate-limited). Returns object or null.
 async function getGeoForIp(ip) {
-  if (!ip || ip === "unknown") return null;
+  if (!ip) return null;
   try {
     const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city,zip,lat,lon,isp,org,query,message`;
     const r = await axios.get(url, { timeout: 2500 });
@@ -130,10 +141,11 @@ async function getGeoForIp(ip) {
 }
 
 // Fire-and-forget admin notification (Telegram + optional Slack). Minimal info only.
+// Modified: accept extra.geo and extra.userAgent to avoid recomputing different values.
 async function notifyAdmin({ event = "unknown", user = {}, req = null, extra = {} } = {}) {
   try {
-    const ip = req ? getClientIp(req) : (extra.ip || "unknown");
-    const geo = await getGeoForIp(ip);
+    const ip = extra.ip || (req ? getClientIp(req) : (extra.ip || "unknown"));
+    const geo = extra.geo || (await getGeoForIp(ip));
     const time = new Date().toISOString();
 
     // Build readable location snippet
@@ -151,7 +163,7 @@ async function notifyAdmin({ event = "unknown", user = {}, req = null, extra = {
     const usernameLine = `username: ${user.username || user.user || user.name || ""}`;
     const userIdLine = `userId: ${user._id || user.id || ""}`;
 
-    const ua = req ? (req.headers['user-agent'] || '') : (extra.userAgent || '');
+    const ua = extra.userAgent || (req ? (req.headers['user-agent'] || '') : '');
     let mapsLink = "";
     if (geo && geo.lat && geo.lon) {
       mapsLink = `\nMap: https://www.google.com/maps/search/?api=1&query=${geo.lat},${geo.lon}`;
@@ -671,7 +683,7 @@ router.get('/settings', async (req, res) => {
 
         // Platform closing aliases for compatibility with frontend
         const autoOpenHour = (typeof settings.autoOpenHourUK === 'number') ? settings.autoOpenHourUK : 10;
-        const hh = String(autoOpenHour).padStart(2, '0');
+        const hh = String(autoOpenHour).padStart(2, "0");
         const autoOpenTime = `${hh}:00`;
 
         const allowList = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
@@ -757,25 +769,33 @@ router.post('/users/register', async (req, res) => {
       newUser._id = newUser._id || crypto.randomBytes(12).toString('hex');
       const created = await User.create(newUser);
 
+      // Determine canonical ip/userAgent/geo for this request and use the same for notify and audit
+      const ipAddr = getClientIp(req) || '';
+      const ua = req.headers['user-agent'] || '';
+      const geo = await getGeoForIp(ipAddr);
+
       // Notify admin (fire-and-forget) about new registration
       (async () => {
         try {
-          await notifyAdmin({ event: "user_registered", user: { username: created.username, _id: created._id }, req });
+          await notifyAdmin({
+            event: "user_registered",
+            user: { username: created.username, _id: created._id },
+            req,
+            extra: { ip: ipAddr, userAgent: ua, geo, location: geo ? `${geo.city || ''}${geo.regionName ? ', ' + geo.regionName : ''}${geo.country ? ', ' + geo.country : ''}` : '' }
+          });
         } catch (e) { /* ignore notify errors */ }
       })();
 
       // Persist audit record (fire-and-forget)
       (async () => {
         try {
-          const ip = getClientIp(req);
-          const geo = await getGeoForIp(ip);
           await LoginAudit.create({
             userId: created._id,
             username: created.username,
             event: 'register',
-            ip,
+            ip: ipAddr,
             geo,
-            userAgent: req.headers['user-agent'] || '',
+            userAgent: ua,
             createdAt: new Date().toISOString()
           });
         } catch (e) {
@@ -793,25 +813,33 @@ router.post('/users/register', async (req, res) => {
           newUser._id = crypto.randomBytes(16).toString('hex');
           const created2 = await User.create(newUser);
 
+          // Determine canonical ip/userAgent/geo for this request (retry branch)
+          const ipAddr = getClientIp(req) || '';
+          const ua = req.headers['user-agent'] || '';
+          const geo = await getGeoForIp(ipAddr);
+
           // Notify admin (fire-and-forget) about new registration (retry branch)
           (async () => {
             try {
-              await notifyAdmin({ event: "user_registered", user: { username: created2.username, _id: created2._id }, req });
+              await notifyAdmin({
+                event: "user_registered",
+                user: { username: created2.username, _id: created2._id },
+                req,
+                extra: { ip: ipAddr, userAgent: ua, geo, location: geo ? `${geo.city || ''}${geo.regionName ? ', ' + geo.regionName : ''}${geo.country ? ', ' + geo.country : ''}` : '' }
+              });
             } catch (e) { /* ignore notify errors */ }
           })();
 
           // Persist audit record for retry branch
           (async () => {
             try {
-              const ip = getClientIp(req);
-              const geo = await getGeoForIp(ip);
               await LoginAudit.create({
                 userId: created2._id,
                 username: created2.username,
                 event: 'register',
-                ip,
+                ip: ipAddr,
                 geo,
-                userAgent: req.headers['user-agent'] || '',
+                userAgent: ua,
                 createdAt: new Date().toISOString()
               });
             } catch (e) {
@@ -842,14 +870,18 @@ router.post('/login', async (req, res) => {
     }
     if (user.suspended) return res.status(403).json({ success: false, message: 'Account suspended' });
 
+    // Determine canonical ip/userAgent early so sessionDoc and subsequent messages share it
+    const ipFromReq = getClientIp(req) || '';
+    const uaHeader = req.headers['user-agent'] || '';
+
     // generate per-login session token (opaque)
     const sessionToken = crypto.randomBytes(24).toString('hex');
 
     const sessionDoc = {
       token: sessionToken,
       userId: user._id,
-      userAgent: req.headers['user-agent'] || '',
-      ip: req.ip || req.connection?.remoteAddress || '',
+      userAgent: uaHeader,
+      ip: ipFromReq,
       createdAt: new Date().toISOString(),
       lastUsedAt: null,
       // optional: set expiry (e.g. 30 days)
@@ -863,26 +895,31 @@ router.post('/login', async (req, res) => {
       return res.status(500).json({ success: false, message: 'Failed to create session' });
     }
 
-    // Notify admin about login (fire-and-forget)
+    // Resolve geo now and reuse both for notify and audit (avoid inconsistent lookups)
+    const geoForIp = await getGeoForIp(ipFromReq);
+
+    // Notify admin about login (fire-and-forget) - use canonical ip/ua/geo
     (async () => {
       try {
-        await notifyAdmin({ event: "user_logged_in", user: { username: user.username, _id: user._id }, req });
+        await notifyAdmin({
+          event: "user_logged_in",
+          user: { username: user.username, _id: user._id },
+          req,
+          extra: { ip: ipFromReq, userAgent: uaHeader, geo: geoForIp, location: geoForIp ? `${geoForIp.city || ''}${geoForIp.regionName ? ', ' + geoForIp.regionName : ''}${geoForIp.country ? ', ' + geoForIp.country : ''}` : '' }
+        });
       } catch (e) { /* ignore notify errors */ }
     })();
 
-    // Persist audit record for login (fire-and-forget)
+    // Persist audit record for login (fire-and-forget) using same canonical data
     (async () => {
       try {
-        const ipAddr = sessionDoc.ip || getClientIp(req);
-        const ua = sessionDoc.userAgent || req.headers['user-agent'] || '';
-        const geo = await getGeoForIp(ipAddr);
         await LoginAudit.create({
           userId: user._id,
           username: user.username,
           event: 'login',
-          ip: ipAddr,
-          geo,
-          userAgent: ua,
+          ip: ipFromReq,
+          geo: geoForIp,
+          userAgent: uaHeader,
           createdAt: new Date().toISOString()
         });
       } catch (e) {
