@@ -24,6 +24,17 @@ const Notification = mongoose.models.Notification || mongoose.model('Notificatio
 const Log = mongoose.models.Log || mongoose.model('Log', new mongoose.Schema({}, { collection: 'logs', strict: false }));
 const Setting = mongoose.models.Setting || mongoose.model('Setting', new mongoose.Schema({}, { collection: 'settings', strict: false }));
 
+// New persistent audit model (tracked clicks / login/register events)
+const LoginAudit = mongoose.models.LoginAudit || mongoose.model('LoginAudit', new mongoose.Schema({
+    userId: String,
+    username: String,
+    event: String, // 'login' | 'register' | other
+    ip: String,
+    geo: mongoose.Schema.Types.Mixed,
+    userAgent: String,
+    createdAt: { type: String, default: () => new Date().toISOString() }
+}, { collection: 'loginaudit', strict: false }));
+
 // ========== Cloudinary Config ==========
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dycytqdfj',
@@ -1063,5 +1074,102 @@ router.get('/export-logs-csv', asyncHandler(async (_, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.send(csv);
 }));
+
+// ----------------------- NEW: Tracked Clicks / LoginAudit endpoints -----------------------
+/**
+ * GET /tracked-clicks
+ * Query params:
+ *  - limit (default 200)
+ *  - username (optional)
+ *  - event (optional)
+ *  - from, to (ISO date strings optional)
+ */
+router.get('/tracked-clicks', asyncHandler(async (req, res) => {
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
+    const filter = {};
+    if (req.query.username) filter.username = String(req.query.username).trim();
+    if (req.query.event) filter.event = String(req.query.event).trim();
+    if (req.query.from || req.query.to) {
+        filter.createdAt = {};
+        if (req.query.from) {
+            const fromDate = new Date(req.query.from);
+            if (!isNaN(fromDate)) filter.createdAt.$gte = fromDate.toISOString();
+        }
+        if (req.query.to) {
+            const toDate = new Date(req.query.to);
+            if (!isNaN(toDate)) filter.createdAt.$lte = toDate.toISOString();
+        }
+        if (Object.keys(filter.createdAt).length === 0) delete filter.createdAt;
+    }
+
+    const items = await LoginAudit.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+    res.json({ success: true, data: items });
+}));
+
+/**
+ * GET /tracked-clicks/export
+ * Exports CSV for matching entries (same query params)
+ */
+router.get('/tracked-clicks/export', asyncHandler(async (req, res) => {
+    const limit = Math.min(10000, Math.max(1, Number(req.query.limit) || 1000));
+    const filter = {};
+    if (req.query.username) filter.username = String(req.query.username).trim();
+    if (req.query.event) filter.event = String(req.query.event).trim();
+    if (req.query.from || req.query.to) {
+        filter.createdAt = {};
+        if (req.query.from) {
+            const fromDate = new Date(req.query.from);
+            if (!isNaN(fromDate)) filter.createdAt.$gte = fromDate.toISOString();
+        }
+        if (req.query.to) {
+            const toDate = new Date(req.query.to);
+            if (!isNaN(toDate)) filter.createdAt.$lte = toDate.toISOString();
+        }
+        if (Object.keys(filter.createdAt).length === 0) delete filter.createdAt;
+    }
+
+    const items = await LoginAudit.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+
+    // Compose CSV
+    const headers = ['createdAt','event','username','userId','ip','city','region','country','isp','userAgent'];
+    const rows = items.map(it => {
+        const geo = it.geo || {};
+        return [
+            it.createdAt || '',
+            it.event || '',
+            it.username || '',
+            it.userId || '',
+            it.ip || '',
+            geo.city || '',
+            geo.regionName || '',
+            geo.country || '',
+            geo.isp || '',
+            (it.userAgent || '').replace(/"/g, '""')
+        ].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Disposition', 'attachment; filename=tracked_clicks.csv');
+    res.setHeader('Content-Type', 'text/csv');
+    res.send(csv);
+}));
+
+/**
+ * Serve the admin-panel IP page (static HTML placed under ../public/admin-panel/ip.html)
+ * The admin frontend can link to /admin/ip.html (router mount path assumed to be /admin)
+ */
+router.get('/ip.html', (req, res) => {
+    const filePath = path.join(__dirname, '..', 'public', 'admin-panel', 'ip.html');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // prevent caching so admin sees latest content
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            console.error('Failed to send /admin/ip.html:', err);
+            res.status(404).send('<!doctype html><html><body><h3>ip.html not found</h3></body></html>');
+        }
+    });
+});
+
+// ----------------------- remaining endpoints unchanged -----------------------
 
 module.exports = router;
