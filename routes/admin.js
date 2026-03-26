@@ -1154,6 +1154,40 @@ router.get('/tracked-clicks/export', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * DELETE /tracked-clicks/:id
+ * Delete a single LoginAudit record by _id
+ */
+router.delete('/tracked-clicks/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, message: 'Missing id' });
+    // allow string ObjectId or plain string id
+    const q = { $or: [{ _id: id }, { _id: mongoose.Types.ObjectId.isValid(id) ? mongoose.Types.ObjectId(id) : null }] };
+    // sanitize q to avoid null in $or
+    const or = q.$or.filter(Boolean);
+    const result = await LoginAudit.deleteOne({ $or: or });
+    if (!result || result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Record not found' });
+    res.json({ success: true, message: 'Deleted' });
+}));
+
+/**
+ * POST /tracked-clicks/bulk-delete
+ * Body: { ids: [id1, id2, ...] }
+ */
+router.post('/tracked-clicks/bulk-delete', asyncHandler(async (req, res) => {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ success: false, message: 'ids array required' });
+    const objectIds = ids.filter(Boolean).map(id => (mongoose.Types.ObjectId.isValid(id) ? mongoose.Types.ObjectId(id) : null)).filter(Boolean);
+    const stringIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    const cond = { $or: [] };
+    if (objectIds.length) cond.$or.push({ _id: { $in: objectIds } });
+    if (stringIds.length) cond.$or.push({ _id: { $in: stringIds } });
+    if (!cond.$or.length) return res.status(400).json({ success: false, message: 'No valid ids found' });
+
+    const result = await LoginAudit.deleteMany(cond);
+    res.json({ success: true, deletedCount: result.deletedCount || 0 });
+}));
+
+/**
  * Serve the admin-panel IP page (static HTML placed under ../public/admin-panel/ip.html)
  * The admin frontend can link to /admin/ip.html (router mount path assumed to be /admin)
  */
@@ -1171,5 +1205,92 @@ router.get('/ip.html', (req, res) => {
 });
 
 // ----------------------- remaining endpoints unchanged -----------------------
+
+// ======================== NEW: Service-links read/write endpoints ========================
+const SERVICE_LINKS_FILE = path.join(__dirname, '..', 'public', 'service-links.json');
+
+/**
+ * GET /service-links
+ * Returns service links JSON. Prefer DB stored Setting.serviceLinks, fallback to file.
+ */
+router.get('/service-links', asyncHandler(async (req, res) => {
+  try {
+    const settingsDoc = await Setting.findOne({}).lean();
+    if (settingsDoc && settingsDoc.serviceLinks) {
+      return res.json({ success: true, source: 'db', data: settingsDoc.serviceLinks });
+    }
+    // fallback: read file
+    try {
+      const raw = fs.readFileSync(SERVICE_LINKS_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      return res.json({ success: true, source: 'file', data: parsed });
+    } catch (fileErr) {
+      return res.status(404).json({ success: false, message: 'No service links found (DB empty and file missing)' });
+    }
+  } catch (err) {
+    console.error('GET /admin/service-links error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to read service links' });
+  }
+}));
+
+/**
+ * POST /service-links
+ * Body: JSON object to persist as service links.
+ * Persists into Setting.serviceLinks and attempts to write file public/service-links.json (best-effort).
+ */
+router.post('/service-links', asyncHandler(async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ success: false, message: 'Expected JSON object in request body' });
+    }
+
+    const saved = await Setting.findOneAndUpdate({}, { $set: { serviceLinks: payload } }, { upsert: true, new: true });
+
+    try {
+      fs.writeFileSync(SERVICE_LINKS_FILE, JSON.stringify(payload, null, 2), 'utf8');
+    } catch (fsErr) {
+      console.warn('Warning: could not write service-links.json to disk:', fsErr && fsErr.message ? fsErr.message : fsErr);
+    }
+
+    return res.json({ success: true, message: 'Service links saved', data: saved.serviceLinks || payload });
+  } catch (err) {
+    console.error('POST /admin/service-links error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to save service links' });
+  }
+}));
+
+/**
+ * POST /service-links/delete-keys
+ * Body: { keys: ['k1','k2'] } - deletes specified keys from serviceLinks map (DB + file).
+ */
+router.post('/service-links/delete-keys', asyncHandler(async (req, res) => {
+  try {
+    const { keys } = req.body;
+    if (!Array.isArray(keys)) return res.status(400).json({ success: false, message: 'keys array required' });
+
+    const settingsDoc = await Setting.findOne({}) || {};
+    const current = settingsDoc.serviceLinks || {};
+
+    let changed = false;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(current, k)) {
+        delete current[k];
+        changed = true;
+      }
+    }
+
+    if (!changed) return res.json({ success: true, message: 'No keys removed', data: current });
+
+    const saved = await Setting.findOneAndUpdate({}, { $set: { serviceLinks: current } }, { upsert: true, new: true });
+
+    try { fs.writeFileSync(SERVICE_LINKS_FILE, JSON.stringify(current, null, 2), 'utf8'); } catch(e) { console.warn('file write failed', e); }
+
+    return res.json({ success: true, message: 'Keys removed', data: saved.serviceLinks || current });
+  } catch (err) {
+    console.error('POST /admin/service-links/delete-keys error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete keys' });
+  }
+}));
 
 module.exports = router;
