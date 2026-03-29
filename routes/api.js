@@ -488,7 +488,9 @@ async function getOrCreateSettings() {
       platformClosed: false,
       autoOpenHourUK: 10,
       whoCanAccessDuringClose: [],
-      service: { whatsapp: "", telegram: "" }
+      service: { whatsapp: "", telegram: "" },
+      // ensure we also persist a serviceLinks shape for frontend compatibility
+      serviceLinks: { whatsapp: "", telegram: "" }
     });
   } else {
     const updates = {};
@@ -496,6 +498,8 @@ async function getOrCreateSettings() {
     if (typeof settings.autoOpenHourUK === 'undefined') updates.autoOpenHourUK = 10;
     if (!Array.isArray(settings.whoCanAccessDuringClose)) updates.whoCanAccessDuringClose = [];
     if (!settings.service) updates.service = { whatsapp: "", telegram: "" };
+    // Ensure serviceLinks exists for newer frontend integrations
+    if (typeof settings.serviceLinks === 'undefined') updates.serviceLinks = { whatsapp: "", telegram: "" };
     if (Object.keys(updates).length) {
       await Setting.updateOne({ _id: settings._id }, { $set: updates });
       settings = await Setting.findById(settings._id);
@@ -688,15 +692,18 @@ router.get('/settings', async (req, res) => {
 
         const allowList = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
 
-        // Prevent intermediate caches / clients from serving stale cached version
-        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-        res.set('Pragma', 'no-cache');
-        res.set('Expires', '0');
+        // SERVICE LINKS: prefer explicit settings.serviceLinks, otherwise derive from settings.service (legacy)
+        const serviceLinks = (settings && (settings.serviceLinks || settings.contactLinks))
+          ? (settings.serviceLinks || settings.contactLinks)
+          : {
+              whatsapp: (settings && settings.service && settings.service.whatsapp) ? settings.service.whatsapp : "",
+              telegram: (settings && settings.service && settings.service.telegram) ? settings.service.telegram : ""
+            };
 
         res.json({
             service: settings && settings.service ? settings.service : { whatsapp: "", telegram: "" },
-            // New explicit key for frontend contexts that expect "serviceLinks"
-            serviceLinks: settings && settings.service ? settings.service : { whatsapp: "", telegram: "" },
+            // include explicit serviceLinks object for frontends that expect it
+            serviceLinks,
             platformClosed: !!settings.platformClosed,
             autoOpenHourUK: autoOpenHour,
             autoOpenTime,
