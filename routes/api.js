@@ -688,8 +688,15 @@ router.get('/settings', async (req, res) => {
 
         const allowList = Array.isArray(settings.whoCanAccessDuringClose) ? settings.whoCanAccessDuringClose : [];
 
+        // Prevent intermediate caches / clients from serving stale cached version
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+
         res.json({
             service: settings && settings.service ? settings.service : { whatsapp: "", telegram: "" },
+            // New explicit key for frontend contexts that expect "serviceLinks"
+            serviceLinks: settings && settings.service ? settings.service : { whatsapp: "", telegram: "" },
             platformClosed: !!settings.platformClosed,
             autoOpenHourUK: autoOpenHour,
             autoOpenTime,
